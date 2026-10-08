@@ -212,18 +212,20 @@ mod tests {
 
     #[test]
     fn converts_to_engine_settings() {
-        let mut c = Config::default();
-        c.lesson = LessonConfig {
-            target_wpm: 50.0,
-            alphabet_size: 0.5,
-            recover_keys: true,
-            natural_words: false,
-            length: 1.0,
-            repeat_words: 3,
-        };
-        c.drill = DrillConfig {
-            enabled: true,
-            repeat_count: 5,
+        let c = Config {
+            lesson: LessonConfig {
+                target_wpm: 50.0,
+                alphabet_size: 0.5,
+                recover_keys: true,
+                natural_words: false,
+                length: 1.0,
+                repeat_words: 3,
+            },
+            drill: DrillConfig {
+                enabled: true,
+                repeat_count: 5,
+            },
+            ..Config::default()
         };
         assert_eq!(
             c.lesson_settings(),
