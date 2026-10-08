@@ -12,6 +12,11 @@ engine of [keybr.com](https://www.keybr.com) to Rust and runs it as a TUI.
   word must then be typed cleanly N times (default 10) before you move on.
 - **Key stats.** Per-key speed and progress, a QWERTY heatmap, and your
   slowest key *transitions* (bigrams) across recent lessons.
+- **Transition drills.** Press `t` in the menu for lessons built around your
+  3 slowest letter-to-letter transitions over the last 50 lessons. Words take
+  turns drilling each pair. A pair needs 10 typings before it counts. Targets
+  are recomputed every lesson, so a pair drops off once it gets faster. Press
+  `g` to return to guided lessons.
 - **Themes.** TOML files with hex colours. Built-ins: `terminal` (uses your
   terminal's palette), `gruvbox`, `catppuccin-mocha`, `nord`.
 
@@ -25,7 +30,7 @@ termtype
 | Where    | Keys                                                                          |
 |----------|-------------------------------------------------------------------------------|
 | Typing   | `esc` menu · `tab` new lesson · `ctrl-w` / `ctrl-backspace` delete word · `ctrl-c` quit |
-| Menu     | `enter` next lesson · `k` key stats · `s` settings · `q` quit                 |
+| Menu     | `enter` next lesson · `t` transition drills · `g` guided lessons · `k` key stats · `s` settings · `q` quit |
 | Settings | `↑↓` select · `←→` / `enter` change · `esc` back                             |
 
 ## Files

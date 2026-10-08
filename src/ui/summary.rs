@@ -106,7 +106,7 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(
         footer(
             theme,
-            "enter next lesson · k key stats · s settings · q quit",
+            "enter next · t transitions · g guided · k stats · s settings · q quit",
         ),
         footer_area,
     );

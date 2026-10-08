@@ -1,4 +1,4 @@
-use super::{border_note, centered, footer, keys_panel, panel, wrap_chars};
+use super::{border_label, border_note, centered, footer, keys_panel, panel, wrap_chars};
 use crate::app::App;
 use crate::engine::result::cpm_to_wpm;
 use crate::engine::textinput::{Attr, StyledChar};
@@ -60,7 +60,29 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
         .map(|line| Line::from(line.iter().map(char_span).collect::<Vec<_>>()))
         .collect();
 
-    let mut block = panel(theme, "termtype").padding(Padding::new(2, 2, 1, 1));
+    let title = if app.targets.is_empty() {
+        "termtype"
+    } else {
+        "transitions"
+    };
+    let mut block = panel(theme, title).padding(Padding::new(2, 2, 1, 1));
+    if !app.targets.is_empty() {
+        block = block.title_bottom(border_label(
+            theme,
+            vec![
+                Span::styled("drilling ", Style::new().fg(theme.muted)),
+                Span::styled(
+                    app.targets.join(" · "),
+                    Style::new().fg(theme.accent).add_modifier(Modifier::BOLD),
+                ),
+            ],
+        ));
+    } else if let Some(notice) = &app.notice {
+        block = block.title_bottom(border_label(
+            theme,
+            vec![Span::styled(notice.clone(), Style::new().fg(theme.bad))],
+        ));
+    }
     let steps = input.steps();
     block = block.title_top(if steps.is_empty() {
         border_note(

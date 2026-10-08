@@ -11,3 +11,4 @@ pub mod session;
 pub mod stats;
 pub mod textgen;
 pub mod textinput;
+pub mod transitions;

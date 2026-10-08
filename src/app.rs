@@ -10,6 +10,7 @@ use crate::engine::rng::LessonRng;
 use crate::engine::session::Session;
 use crate::engine::stats::make_stats;
 use crate::engine::textgen::{self, Dictionary};
+use crate::engine::transitions;
 use crate::theme::Theme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -18,6 +19,15 @@ pub enum Screen {
     Summary,
     KeyStats,
     Settings,
+}
+
+/// What kind of lesson to generate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LessonMode {
+    /// keybr's method: unlock letters, focus the weakest key.
+    Guided,
+    /// Words built around the slowest key transitions.
+    Transitions,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,6 +126,11 @@ pub struct App {
     pub last_lesson: Option<LessonSummary>,
     pub settings_cursor: usize,
     pub should_quit: bool,
+    pub mode: LessonMode,
+    /// Transitions the current lesson drills (transition mode only).
+    pub targets: Vec<String>,
+    /// A message about the current lesson, e.g. why a drill fell back.
+    pub notice: Option<String>,
     /// Monotonic ms, updated on every input; used for live speed.
     pub now: f64,
     letters: Vec<char>,
@@ -150,6 +165,9 @@ impl App {
             last_lesson: None,
             settings_cursor: 0,
             should_quit: false,
+            mode: LessonMode::Guided,
+            targets: vec![],
+            notice: None,
             now: 0.0,
             letters,
             model,
@@ -170,13 +188,33 @@ impl App {
 
     /// Generates a new lesson for the current keys and switches to it.
     fn new_lesson(&mut self) {
-        let text = textgen::generate(
-            &self.model,
-            &self.dictionary,
-            &self.keys,
-            &self.config.text_settings(),
-            &mut self.rng,
-        );
+        self.targets.clear();
+        self.notice = None;
+        if self.mode == LessonMode::Transitions {
+            self.targets =
+                transitions::weak_transitions(&self.results, &self.keys.included_letters());
+            if self.targets.is_empty() {
+                self.notice = Some("not enough transition data yet · guided lesson instead".into());
+            }
+        }
+        let text = if self.targets.is_empty() {
+            textgen::generate(
+                &self.model,
+                &self.dictionary,
+                &self.keys,
+                &self.config.text_settings(),
+                &mut self.rng,
+            )
+        } else {
+            transitions::generate(
+                &self.model,
+                &self.dictionary,
+                &self.targets,
+                &self.keys.included_letters(),
+                &self.config.text_settings(),
+                &mut self.rng,
+            )
+        };
         self.session = Session::new(
             &text,
             self.config.input_settings(),
@@ -243,6 +281,14 @@ impl App {
                 match input {
                     Input::Enter | Input::Char(' ') | Input::Restart => self.new_lesson(),
                     Input::Char('k') => self.screen = Screen::KeyStats,
+                    Input::Char('t') => {
+                        self.mode = LessonMode::Transitions;
+                        self.new_lesson();
+                    }
+                    Input::Char('g') => {
+                        self.mode = LessonMode::Guided;
+                        self.new_lesson();
+                    }
                     Input::Char('s') => self.screen = Screen::Settings,
                     Input::Char('q') | Input::Esc => self.should_quit = true,
                     _ => {}
@@ -428,6 +474,87 @@ pub(crate) mod tests {
             .iter()
             .filter(|e| matches!(e, Effect::SaveResult(_)))
             .count()
+    }
+
+    fn transition_history() -> Vec<LessonResult> {
+        use crate::engine::result::tests::with_bigrams;
+        vec![with_bigrams(&[
+            ("ea", 20, 0, 500),
+            ("rl", 20, 0, 600),
+            ("ni", 20, 0, 400),
+        ])]
+    }
+
+    fn to_menu(app: &mut App) {
+        app.handle(Input::Esc, 0.0, 0);
+        assert_eq!(app.screen, Screen::Summary);
+    }
+
+    #[test]
+    fn t_starts_transition_drill() {
+        let mut app = app_with(Config::default(), transition_history());
+        assert_eq!(app.mode, LessonMode::Guided);
+        to_menu(&mut app);
+        app.handle(Input::Char('t'), 0.0, 0);
+        assert_eq!(app.screen, Screen::Practice);
+        assert_eq!(app.mode, LessonMode::Transitions);
+        assert_eq!(app.targets, ["rl", "ea", "ni"]);
+        assert_eq!(app.notice, None);
+        for w in lesson_text(&app).split(' ') {
+            assert!(app.targets.iter().any(|t| w.contains(t.as_str())), "{w}");
+        }
+    }
+
+    #[test]
+    fn mode_sticks_across_new_lessons() {
+        let mut app = app_with(Config::default(), transition_history());
+        to_menu(&mut app);
+        app.handle(Input::Char('t'), 0.0, 0);
+        app.handle(Input::Restart, 0.0, 0);
+        assert_eq!(app.mode, LessonMode::Transitions);
+        to_menu(&mut app);
+        app.handle(Input::Enter, 0.0, 0);
+        assert_eq!(app.mode, LessonMode::Transitions);
+        assert!(!app.targets.is_empty());
+    }
+
+    #[test]
+    fn g_returns_to_guided() {
+        let mut app = app_with(Config::default(), transition_history());
+        to_menu(&mut app);
+        app.handle(Input::Char('t'), 0.0, 0);
+        to_menu(&mut app);
+        app.handle(Input::Char('g'), 0.0, 0);
+        assert_eq!(app.mode, LessonMode::Guided);
+        assert!(app.targets.is_empty());
+        assert_eq!(app.screen, Screen::Practice);
+    }
+
+    #[test]
+    fn transition_drill_without_data_falls_back_to_guided_text() {
+        let mut app = app();
+        to_menu(&mut app);
+        app.handle(Input::Char('t'), 0.0, 0);
+        assert_eq!(app.mode, LessonMode::Transitions);
+        assert!(app.targets.is_empty());
+        assert!(
+            app.notice
+                .as_deref()
+                .is_some_and(|n| n.contains("not enough"))
+        );
+        let text = lesson_text(&app);
+        assert!(text.contains('e'), "{text}"); // guided text drills the focus key
+    }
+
+    #[test]
+    fn transition_lessons_are_saved() {
+        let mut app = app_with(Config::default(), transition_history());
+        to_menu(&mut app);
+        app.handle(Input::Char('t'), 0.0, 0);
+        let text = lesson_text(&app);
+        let effects = type_str(&mut app, &text, 0.0);
+        assert_eq!(saved_results(&effects), 1);
+        assert_eq!(app.screen, Screen::Summary);
     }
 
     #[test]

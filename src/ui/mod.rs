@@ -116,6 +116,15 @@ fn border_note(theme: &Theme, spans: Vec<Span<'static>>) -> Line<'static> {
     Line::from(all).right_aligned()
 }
 
+/// Text for the left-hand side of a panel's bottom border.
+fn border_label(theme: &Theme, spans: Vec<Span<'static>>) -> Line<'static> {
+    let border = Style::new().fg(theme.muted);
+    let mut all = vec![Span::styled("─ ", border)];
+    all.extend(spans);
+    all.push(Span::styled(" ", border));
+    Line::from(all).left_aligned()
+}
+
 /// The unlocked keys plus the next locked one, and the focus details.
 fn keys_panel(frame: &mut Frame, app: &App, area: Rect) {
     let theme = app.theme();
@@ -344,6 +353,47 @@ mod tests {
         }
     }
 
+    fn transition_app() -> App {
+        use crate::engine::result::tests::with_bigrams;
+        let history = vec![with_bigrams(&[
+            ("ea", 20, 0, 500),
+            ("rl", 20, 0, 600),
+            ("ni", 20, 0, 400),
+        ])];
+        let mut app = app_with(Config::default(), history);
+        app.handle(Input::Esc, 0.0, 0);
+        app.handle(Input::Char('t'), 0.0, 0);
+        app
+    }
+
+    #[test]
+    fn transition_lesson_shows_title_and_targets() {
+        let app = transition_app();
+        let text = screen_text(&render(&app, 90, 30));
+        assert!(text.contains("╭─ transitions"), "{text}");
+        assert!(text.contains("rl · ea · ni"), "{text}");
+    }
+
+    #[test]
+    fn transition_fallback_shows_notice() {
+        let mut app = app();
+        app.handle(Input::Esc, 0.0, 0);
+        app.handle(Input::Char('t'), 0.0, 0);
+        let text = screen_text(&render(&app, 90, 30));
+        assert!(text.contains("not enough transition data"), "{text}");
+    }
+
+    #[test]
+    fn summary_footer_offers_both_modes() {
+        let mut app = app();
+        app.handle(Input::Esc, 0.0, 0);
+        let text = screen_text(&render(&app, 90, 30));
+        assert!(
+            text.contains("t transitions") && text.contains("g guided"),
+            "{text}"
+        );
+    }
+
     #[test]
     fn practice_live_stats_in_lesson_border() {
         let mut app = app();
@@ -418,7 +468,7 @@ mod tests {
         assert!(text.contains("wpm"), "{text}");
         assert!(text.contains("accuracy"), "{text}");
         assert!(text.contains("100.0%"), "{text}");
-        assert!(text.contains("key stats"), "{text}");
+        assert!(text.contains("k stats"), "{text}");
     }
 
     #[test]

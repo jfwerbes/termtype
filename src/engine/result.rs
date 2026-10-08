@@ -289,7 +289,7 @@ pub(crate) mod tests {
         assert_eq!(b.0.len(), 2);
     }
 
-    fn with_bigrams(entries: &[(&str, u32, u32, u32)]) -> LessonResult {
+    pub fn with_bigrams(entries: &[(&str, u32, u32, u32)]) -> LessonResult {
         let mut r = fake_result(0, &[]);
         r.bigrams = Bigrams(
             entries
