@@ -8,4 +8,5 @@ pub mod phonetic;
 pub mod result;
 pub mod rng;
 pub mod stats;
+pub mod textgen;
 pub mod textinput;
