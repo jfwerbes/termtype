@@ -109,6 +109,17 @@ impl TextInput {
         self.typo
     }
 
+    /// Inserts text at `at`, which must not be behind the cursor.
+    pub fn insert(&mut self, at: usize, text: &str) {
+        assert!(
+            at >= self.pos() && at <= self.len(),
+            "insert at {at} outside {}..={}",
+            self.pos(),
+            self.len()
+        );
+        self.text.splice(at..at, text.chars());
+    }
+
     pub fn chars(&self) -> Vec<StyledChar> {
         let mut out: Vec<StyledChar> = self
             .steps
@@ -561,6 +572,25 @@ mod tests {
         assert_eq!(t.append_char(200.0, ' ', 100.0), Succeeded);
         assert_eq!(t.append_char(300.0, ' ', 100.0), Succeeded);
         assert!(t.completed());
+    }
+
+    #[test]
+    fn insert_ahead_of_cursor() {
+        let mut t = input("ab", true, false, false);
+        t.append_char(100.0, 'a', 100.0);
+        t.insert(1, "xy");
+        assert_eq!(show_chars(&t), "a|[x]|y|b");
+        t.insert(4, "!");
+        assert_eq!(t.text().iter().collect::<String>(), "axyb!");
+        assert_eq!(t.pos(), 1);
+    }
+
+    #[test]
+    #[should_panic]
+    fn insert_behind_cursor_panics() {
+        let mut t = input("ab", true, false, false);
+        t.append_char(100.0, 'a', 100.0);
+        t.insert(0, "x");
     }
 
     #[test]
