@@ -117,6 +117,56 @@ impl LessonResult {
     }
 }
 
+/// A key transition aggregated over several lessons.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BigramStat {
+    pub bigram: String,
+    pub hit_count: u32,
+    pub miss_count: u32,
+    /// Mean ms over timed occurrences, weighted by occurrence count.
+    pub time_to_type: f64,
+}
+
+/// The slowest transitions across `results` seen at least `min_hits` times,
+/// slowest first. Only bigrams made of `letters` (and space) are considered.
+pub fn slowest_bigrams(
+    results: &[LessonResult],
+    letters: &[char],
+    min_hits: u32,
+    limit: usize,
+) -> Vec<BigramStat> {
+    // bigram -> (hits, misses, total time, timed count)
+    let mut acc: BTreeMap<&str, (u32, u32, f64, u32)> = BTreeMap::new();
+    for r in results {
+        for (k, s) in &r.bigrams.0 {
+            if !k.chars().all(|c| c == ' ' || letters.contains(&c)) {
+                continue;
+            }
+            let e = acc.entry(k).or_default();
+            e.0 += s.hit_count;
+            e.1 += s.miss_count;
+            if s.time_to_type > 0 {
+                let timed = s.hit_count - s.miss_count;
+                e.2 += s.time_to_type as f64 * timed as f64;
+                e.3 += timed;
+            }
+        }
+    }
+    let mut stats: Vec<BigramStat> = acc
+        .into_iter()
+        .filter(|(_, (hits, _, _, timed))| *hits >= min_hits && *timed > 0)
+        .map(|(k, (hit_count, miss_count, time, timed))| BigramStat {
+            bigram: k.to_string(),
+            hit_count,
+            miss_count,
+            time_to_type: time / timed as f64,
+        })
+        .collect();
+    stats.sort_by(|a, b| b.time_to_type.total_cmp(&a.time_to_type));
+    stats.truncate(limit);
+    stats
+}
+
 /// Milliseconds per character to characters per minute.
 pub fn time_to_speed(ms: f64) -> f64 {
     60_000.0 / ms
@@ -237,6 +287,49 @@ pub(crate) mod tests {
             })
         );
         assert_eq!(b.0.len(), 2);
+    }
+
+    fn with_bigrams(entries: &[(&str, u32, u32, u32)]) -> LessonResult {
+        let mut r = fake_result(0, &[]);
+        r.bigrams = Bigrams(
+            entries
+                .iter()
+                .map(|&(k, h, m, t)| {
+                    (
+                        k.to_string(),
+                        Sample {
+                            hit_count: h,
+                            miss_count: m,
+                            time_to_type: t,
+                        },
+                    )
+                })
+                .collect(),
+        );
+        r
+    }
+
+    #[test]
+    fn slowest_bigrams_aggregates_and_ranks() {
+        let results = [
+            with_bigrams(&[("ab", 2, 0, 100), ("ba", 5, 1, 400), ("az", 9, 0, 900)]),
+            with_bigrams(&[("ab", 2, 0, 300), ("ba", 1, 0, 100), ("e ", 9, 0, 500)]),
+        ];
+        let got = slowest_bigrams(&results, &['a', 'b', 'e'], 4, 10);
+        let names: Vec<&str> = got.iter().map(|b| b.bigram.as_str()).collect();
+        assert_eq!(names, ["e ", "ba", "ab"]); // "az" has a locked letter
+        // ba: (4 timed * 400 + 1 * 100) / 5 = 340
+        assert_eq!(
+            got[1],
+            BigramStat {
+                bigram: "ba".into(),
+                hit_count: 6,
+                miss_count: 1,
+                time_to_type: 340.0
+            }
+        );
+        assert_eq!(slowest_bigrams(&results, &['a', 'b', 'e'], 5, 10).len(), 2);
+        assert_eq!(slowest_bigrams(&results, &['a', 'b', 'e'], 1, 1).len(), 1);
     }
 
     #[test]
