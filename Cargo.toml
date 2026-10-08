@@ -1,0 +1,10 @@
+[package]
+name = "termtype"
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-only"
+description = "Terminal-native adaptive touch typing tutor (port of keybr.com's learning engine)"
+
+[dependencies]
+
+[dev-dependencies]

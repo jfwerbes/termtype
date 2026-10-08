@@ -1,0 +1,11 @@
+termtype is a terminal port of the adaptive learning engine of keybr.com
+(https://github.com/aradzie/keybr.com), Copyright (c) Aliaksandr Radzivanovich,
+licensed under the GNU Affero General Public License v3.0.
+
+The following files are copied verbatim from keybr.com:
+  assets/model-en.data       (packages/keybr-phonetic-model/assets)
+  assets/words-en.json       (packages/keybr-content-words/lib/data)
+  assets/blacklist-en.json   (packages/keybr-phonetic-model/lib/blacklist)
+
+Algorithms in src/engine/ are translated from keybr.com's TypeScript sources.
+termtype is distributed under the same license (see LICENSE).
