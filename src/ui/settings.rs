@@ -1,12 +1,12 @@
-use super::{centered, hint_line};
+use super::{centered, footer, panel};
 use crate::app::{App, Field};
 use ratatui::Frame;
-use ratatui::layout::Rect;
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Paragraph;
+use ratatui::widgets::{Padding, Paragraph};
 
-const WIDTH: u16 = 64;
+const WIDTH: u16 = 66;
 
 fn help(field: Field) -> &'static str {
     match field {
@@ -27,39 +27,54 @@ fn help(field: Field) -> &'static str {
 
 pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
     let theme = app.theme();
-    let mut lines = vec![
-        Line::styled(
-            "Settings",
-            Style::new().fg(theme.accent).add_modifier(Modifier::BOLD),
-        ),
-        Line::default(),
-    ];
     let label_width = Field::ALL
         .iter()
         .map(|f| f.label().len())
         .max()
         .unwrap_or(0)
-        + 2;
-    for (i, &field) in Field::ALL.iter().enumerate() {
-        let selected = i == app.settings_cursor;
-        let marker = if selected { "› " } else { "  " };
-        let style = if selected {
-            Style::new().fg(theme.accent).add_modifier(Modifier::BOLD)
-        } else {
-            Style::new().fg(theme.text)
-        };
-        lines.push(Line::from(vec![
-            Span::styled(format!("{marker}{:<label_width$}", field.label()), style),
-            Span::styled(app.field_value(field), style),
-        ]));
-    }
+        + 3;
+    let mut lines: Vec<Line> = Field::ALL
+        .iter()
+        .enumerate()
+        .map(|(i, &field)| {
+            let selected = i == app.settings_cursor;
+            let (marker, label_style, value_style) = if selected {
+                let s = Style::new().fg(theme.accent).add_modifier(Modifier::BOLD);
+                ("› ", s, s)
+            } else {
+                (
+                    "  ",
+                    Style::new().fg(theme.text),
+                    Style::new().fg(theme.muted),
+                )
+            };
+            Line::from(vec![
+                Span::styled(
+                    format!("{marker}{:<label_width$}", field.label()),
+                    label_style,
+                ),
+                Span::styled(app.field_value(field), value_style),
+            ])
+        })
+        .collect();
     lines.push(Line::default());
-    lines.push(hint_line(theme, help(Field::ALL[app.settings_cursor])));
-    lines.push(Line::default());
-    lines.push(hint_line(
-        theme,
-        "↑↓ select · ←→ or enter change · esc back",
+    lines.push(Line::styled(
+        help(Field::ALL[app.settings_cursor]),
+        Style::new().fg(theme.muted),
     ));
-    let body = centered(area, WIDTH, lines.len() as u16);
-    frame.render_widget(Paragraph::new(lines), body);
+
+    let height = lines.len() as u16 + 4;
+    let body = centered(area, WIDTH, height + 2);
+    let [panel_area, _, footer_area] = Layout::vertical([
+        Constraint::Length(height),
+        Constraint::Length(1),
+        Constraint::Length(1),
+    ])
+    .areas(body);
+    let block = panel(theme, "settings").padding(Padding::new(2, 2, 1, 1));
+    frame.render_widget(Paragraph::new(lines).block(block), panel_area);
+    frame.render_widget(
+        footer(theme, "↑↓ select · ←→ or enter change · esc back"),
+        footer_area,
+    );
 }

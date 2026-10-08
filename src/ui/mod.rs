@@ -14,7 +14,7 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::Block;
+use ratatui::widgets::{Block, BorderType, Padding, Paragraph};
 
 /// Wraps text at spaces into lines of at most `width` characters. A space
 /// stays at the end of the line it follows (it must stay visible, as the
@@ -90,32 +90,70 @@ fn key_style(theme: &Theme, key: &LessonKey) -> Style {
     }
 }
 
-/// All letters in unlock order, coloured by state. Uses 3, 2 or 1 cells
-/// per key depending on the width available.
-fn key_strip(app: &App, width: u16) -> Line<'static> {
+/// A rounded panel with a title in its top border.
+fn panel(theme: &Theme, title: &str) -> Block<'static> {
+    let border = Style::new().fg(theme.muted);
+    Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(border)
+        .title(Line::from(vec![
+            Span::styled("─ ", border),
+            Span::styled(
+                title.to_string(),
+                Style::new().fg(theme.accent).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" ", border),
+        ]))
+        .padding(Padding::horizontal(2))
+}
+
+/// Text for the right-hand side of a panel's top or bottom border.
+fn border_note(theme: &Theme, spans: Vec<Span<'static>>) -> Line<'static> {
+    let border = Style::new().fg(theme.muted);
+    let mut all = vec![Span::styled(" ", border)];
+    all.extend(spans);
+    all.push(Span::styled(" ─", border));
+    Line::from(all).right_aligned()
+}
+
+/// The unlocked keys plus the next locked one, and the focus details.
+fn keys_panel(frame: &mut Frame, app: &App, area: Rect) {
     let theme = app.theme();
-    let n = app.keys.0.len().max(1) as u16;
-    let cell = if width >= n * 3 {
-        3
-    } else if width >= n * 2 {
-        2
-    } else {
-        1
-    };
-    Line::from(
-        app.keys
-            .0
-            .iter()
-            .map(|k| {
-                let text = match cell {
-                    3 => format!(" {} ", k.letter),
-                    2 => format!("{} ", k.letter),
-                    _ => k.letter.to_string(),
-                };
-                Span::styled(text, key_style(theme, k))
-            })
-            .collect::<Vec<_>>(),
-    )
+    let block = panel(theme, "keys");
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let included: Vec<&LessonKey> = app.keys.included().collect();
+    let next = app.keys.0.iter().find(|k| !k.included);
+    // Three cells per key when they fit, so the focused key reads as a block.
+    let room = (inner.width as usize).saturating_sub(10);
+    let wide = included.len() * 3 <= room;
+    let mut spans = vec![];
+    for k in &included {
+        let text = if wide || k.focused {
+            format!(" {} ", k.letter)
+        } else {
+            format!("{} ", k.letter)
+        };
+        spans.push(Span::styled(text, key_style(theme, k)));
+    }
+    if let Some(next) = next {
+        spans.push(Span::styled(
+            format!("  next {}", next.letter),
+            Style::new().fg(theme.muted),
+        ));
+    }
+    frame.render_widget(
+        Paragraph::new(vec![Line::from(spans), {
+            // Line up with the first key's letter.
+            let mut focus = focus_line(app);
+            if wide {
+                focus.spans.insert(0, Span::raw(" "));
+            }
+            focus
+        }]),
+        inner,
+    );
 }
 
 /// Describes the focused key, or that every key is at target.
@@ -130,7 +168,7 @@ fn focus_line(app: &App) -> Line<'static> {
         ]);
     };
     let speed = match (key.time_to_type, key.best_time_to_type) {
-        (Some(t), Some(b)) => format!("{:.0} wpm (best {:.0})", wpm(t), wpm(b)),
+        (Some(t), Some(b)) => format!("{:.0} wpm, best {:.0}", wpm(t), wpm(b)),
         _ => "no data yet".to_string(),
     };
     Line::from(vec![
@@ -143,8 +181,9 @@ fn focus_line(app: &App) -> Line<'static> {
     ])
 }
 
-fn hint_line(theme: &Theme, text: &str) -> Line<'static> {
-    Line::styled(text.to_string(), Style::new().fg(theme.muted))
+/// Key hints, centred below the panels.
+fn footer(theme: &Theme, text: &str) -> Paragraph<'static> {
+    Paragraph::new(Line::styled(text.to_string(), Style::new().fg(theme.muted)).centered())
 }
 
 #[cfg(test)]
@@ -225,6 +264,99 @@ mod tests {
             line.find(needle)
                 .map(|byte| (line[..byte].chars().count() as u16, y as u16))
         })
+    }
+
+    /// The row index of the first line containing `needle`.
+    fn row_of(buf: &Buffer, needle: &str) -> Option<usize> {
+        screen_text(buf).lines().position(|l| l.contains(needle))
+    }
+
+    #[test]
+    fn every_screen_uses_framed_panels() {
+        let mut app = app();
+        for screen in [
+            Screen::Practice,
+            Screen::Summary,
+            Screen::KeyStats,
+            Screen::Settings,
+        ] {
+            app.screen = screen;
+            let text = screen_text(&render(&app, 90, 30));
+            assert!(
+                text.contains('╭') && text.contains('╯'),
+                "{screen:?}:\n{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn practice_has_lesson_and_keys_panels_with_footer_below() {
+        let app = app();
+        let buf = render(&app, 90, 30);
+        let text = screen_text(&buf);
+        let lesson = row_of(&buf, "╭─ termtype").expect(&text);
+        let keys = row_of(&buf, "╭─ keys").expect(&text);
+        let footer = row_of(&buf, "esc menu").expect(&text);
+        assert!(lesson < keys && keys < footer, "{text}");
+        // The footer is outside every panel.
+        let footer_line = text.lines().nth(footer).unwrap();
+        assert!(!footer_line.contains('│'), "{footer_line}");
+    }
+
+    #[test]
+    fn practice_keys_panel_shows_unlocked_and_next_only() {
+        let app = app();
+        let buf = render(&app, 90, 30);
+        let keys_row = row_of(&buf, "╭─ keys").unwrap();
+        let text = screen_text(&buf);
+        let mut rows = text.lines().skip(keys_row + 1);
+        let (keys, focus) = (rows.next().unwrap(), rows.next().unwrap());
+        assert!(keys.contains("next t"), "{keys}");
+        assert!(!keys.contains(" j "), "locked letters are hidden: {keys}");
+        assert!(
+            focus.contains("focus e") && focus.contains("target 35 wpm"),
+            "{focus}"
+        );
+    }
+
+    #[test]
+    fn panel_titles_per_screen() {
+        let mut app = app();
+        let lesson: String = app.session.input().text().iter().collect();
+        type_str(&mut app, &lesson, 0.0);
+        let expected: [(Screen, &[&str]); 3] = [
+            (
+                Screen::Summary,
+                &["╭─ lesson complete", "╭─ progress", "╭─ keys"],
+            ),
+            (
+                Screen::KeyStats,
+                &["╭─ keyboard", "╭─ slowest transitions", "╭─ per key"],
+            ),
+            (Screen::Settings, &["╭─ settings"]),
+        ];
+        for (screen, titles) in expected {
+            app.screen = screen;
+            let text = screen_text(&render(&app, 100, 40));
+            for t in titles {
+                assert!(text.contains(t), "{screen:?} missing {t}:\n{text}");
+            }
+        }
+    }
+
+    #[test]
+    fn practice_live_stats_in_lesson_border() {
+        let mut app = app();
+        let text: String = app.session.input().text().iter().take(5).collect();
+        type_str(&mut app, &text, 0.0);
+        let buf = render(&app, 90, 30);
+        let title_row = row_of(&buf, "╭─ termtype").unwrap();
+        let line = screen_text(&buf)
+            .lines()
+            .nth(title_row)
+            .unwrap()
+            .to_string();
+        assert!(line.contains("wpm") && line.contains("100%"), "{line}");
     }
 
     #[test]

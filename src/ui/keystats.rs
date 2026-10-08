@@ -1,4 +1,4 @@
-use super::{hint_line, key_style, wpm};
+use super::{border_note, footer, key_style, panel, wpm};
 use crate::app::App;
 use crate::engine::result::slowest_bigrams;
 use ratatui::Frame;
@@ -13,38 +13,43 @@ const BIGRAM_RESULTS: usize = 50;
 
 pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
     let theme = app.theme();
-    let title = Line::styled(
-        format!("Key stats · target {} wpm", app.config.lesson.target_wpm),
-        Style::new().fg(theme.accent).add_modifier(Modifier::BOLD),
-    );
-    let [title_area, main, hint_area] = Layout::vertical([
-        Constraint::Length(2),
+    let [main, _, footer_area] = Layout::vertical([
         Constraint::Min(0),
+        Constraint::Length(1),
         Constraint::Length(1),
     ])
     .areas(area);
-    frame.render_widget(Paragraph::new(title), title_area);
-    frame.render_widget(
-        Paragraph::new(hint_line(theme, "esc back · enter practice")),
-        hint_area,
-    );
+    frame.render_widget(footer(theme, "esc back · enter practice"), footer_area);
 
     // Wide: table on the left, keyboard above transitions on the right.
     // Narrow: keyboard beside transitions, table below.
     let (table_area, keyboard_area, bigram_area) = if main.width >= 100 {
-        let [l, r] = Layout::horizontal([Constraint::Length(62), Constraint::Min(0)]).areas(main);
-        let [k, b] = Layout::vertical([Constraint::Length(4), Constraint::Min(0)]).areas(r);
+        let [l, r] = Layout::horizontal([Constraint::Length(64), Constraint::Min(0)]).areas(main);
+        let [k, b] = Layout::vertical([Constraint::Length(5), Constraint::Min(0)]).areas(r);
         (l, k, b)
     } else {
         let [top, bottom] =
-            Layout::vertical([Constraint::Length(10), Constraint::Min(0)]).areas(main);
-        let [k, b] = Layout::horizontal([Constraint::Length(24), Constraint::Min(0)]).areas(top);
+            Layout::vertical([Constraint::Length(11), Constraint::Min(0)]).areas(main);
+        let [k, b] = Layout::horizontal([Constraint::Length(25), Constraint::Min(0)]).areas(top);
         (bottom, k, b)
     };
 
-    frame.render_widget(Paragraph::new(keyboard(app)), keyboard_area);
-    frame.render_widget(key_table(app), table_area);
-    frame.render_widget(Paragraph::new(bigram_lines(app)), bigram_area);
+    frame.render_widget(
+        Paragraph::new(keyboard(app)).block(panel(theme, "keyboard")),
+        keyboard_area,
+    );
+    let target = Span::styled(
+        format!("target {} wpm", app.config.lesson.target_wpm),
+        Style::new().fg(theme.muted),
+    );
+    frame.render_widget(
+        key_table(app).block(panel(theme, "per key").title_top(border_note(theme, vec![target]))),
+        table_area,
+    );
+    frame.render_widget(
+        Paragraph::new(bigram_lines(app)).block(panel(theme, "slowest transitions")),
+        bigram_area,
+    );
 }
 
 /// QWERTY rows, each key coloured by learning state.
@@ -134,7 +139,7 @@ fn bigram_lines(app: &App) -> Vec<Line<'static>> {
     let recent = &app.results[app.results.len().saturating_sub(BIGRAM_RESULTS)..];
     let slow = slowest_bigrams(recent, &app.keys.included_letters(), 10, 8);
     let mut lines = vec![Line::styled(
-        format!("slowest transitions (last {} lessons)", recent.len()),
+        format!("over the last {} lessons", recent.len()),
         Style::new().fg(theme.muted),
     )];
     if slow.is_empty() {
