@@ -29,16 +29,18 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
         hint_area,
     );
 
-    let (table_area, side) = if main.width >= 100 {
+    // Wide: table on the left, keyboard above transitions on the right.
+    // Narrow: keyboard beside transitions, table below.
+    let (table_area, keyboard_area, bigram_area) = if main.width >= 100 {
         let [l, r] = Layout::horizontal([Constraint::Length(62), Constraint::Min(0)]).areas(main);
-        (l, r)
+        let [k, b] = Layout::vertical([Constraint::Length(4), Constraint::Min(0)]).areas(r);
+        (l, k, b)
     } else {
         let [top, bottom] =
-            Layout::vertical([Constraint::Length(4), Constraint::Min(0)]).areas(main);
-        (bottom, top)
+            Layout::vertical([Constraint::Length(10), Constraint::Min(0)]).areas(main);
+        let [k, b] = Layout::horizontal([Constraint::Length(24), Constraint::Min(0)]).areas(top);
+        (bottom, k, b)
     };
-    let [keyboard_area, bigram_area] =
-        Layout::vertical([Constraint::Length(4), Constraint::Min(0)]).areas(side);
 
     frame.render_widget(Paragraph::new(keyboard(app)), keyboard_area);
     frame.render_widget(key_table(app), table_area);

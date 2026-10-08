@@ -304,6 +304,15 @@ mod tests {
     }
 
     #[test]
+    fn key_stats_shows_transitions_on_narrow_terminals() {
+        let mut app = app();
+        app.screen = Screen::KeyStats;
+        let text = screen_text(&render(&app, 90, 28));
+        assert!(text.contains("slowest transitions"), "{text}");
+        assert!(text.contains("q w e r t y u i o p"), "{text}");
+    }
+
+    #[test]
     fn settings_lists_fields() {
         let mut app = app();
         app.handle(Input::Esc, 0.0, 0);

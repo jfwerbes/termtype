@@ -20,26 +20,31 @@ fn main() -> Result<()> {
     }
 
     let config = Config::load(&paths.config_file())?;
-    let themes = load_themes(&paths);
+    // Warnings are printed after the TUI exits, which clears the screen.
+    let mut warnings = vec![];
+    let themes = load_themes(&paths, &mut warnings);
     if !themes.iter().any(|t| t.name == config.theme) {
-        eprintln!(
-            "warning: unknown theme {:?}, using {:?}",
+        warnings.push(format!(
+            "unknown theme {:?}, using {:?}",
             config.theme, themes[0].name
-        );
+        ));
     }
     let history = store::load_results(&paths.results_file())?;
     if history.skipped > 0 {
-        eprintln!(
-            "warning: skipped {} unreadable lines in {}",
+        warnings.push(format!(
+            "skipped {} unreadable lines in {}",
             history.skipped,
             paths.results_file().display()
-        );
+        ));
     }
 
     let app = App::new(config, themes, history.results, LessonRng::from_entropy());
     let mut terminal = ratatui::init();
     let result = run(&mut terminal, app, &paths);
     ratatui::restore();
+    for w in warnings {
+        eprintln!("warning: {w}");
+    }
     result
 }
 
@@ -72,13 +77,13 @@ fn run(terminal: &mut DefaultTerminal, mut app: App, paths: &Paths) -> Result<()
 }
 
 /// Built-in themes plus any valid user themes; broken ones are reported.
-fn load_themes(paths: &Paths) -> Vec<Theme> {
+fn load_themes(paths: &Paths, warnings: &mut Vec<String>) -> Vec<Theme> {
     Theme::available(&paths.themes_dir())
         .iter()
         .filter_map(|name| match Theme::load(name, &paths.themes_dir()) {
             Ok(t) => Some(t),
             Err(e) => {
-                eprintln!("warning: {e:#}");
+                warnings.push(format!("{e:#}"));
                 None
             }
         })
