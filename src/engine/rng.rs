@@ -34,13 +34,29 @@ impl Rng for Lcg {
     }
 }
 
-/// Generator seeded from the system clock, for real lessons.
-pub fn from_time() -> Lcg {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.subsec_nanos() ^ d.as_secs() as u32)
-        .unwrap_or(0);
-    Lcg::new(nanos)
+/// A good-quality generator for real lessons.
+///
+/// keybr's LCG loses precision in its multiply, so its sequences cycle after
+/// about 10k values (only 220 from some seeds), which makes lesson text
+/// repeat. `Lcg` is kept only to check results against keybr's test vectors.
+pub struct LessonRng(rand::rngs::SmallRng);
+
+impl LessonRng {
+    pub fn from_entropy() -> Self {
+        use rand::SeedableRng;
+        Self(rand::rngs::SmallRng::from_os_rng())
+    }
+
+    pub fn seeded(seed: u64) -> Self {
+        use rand::SeedableRng;
+        Self(rand::rngs::SmallRng::seed_from_u64(seed))
+    }
+}
+
+impl Rng for LessonRng {
+    fn next_f64(&mut self) -> f64 {
+        rand::Rng::random::<f64>(&mut self.0)
+    }
 }
 
 /// Picks a uniformly random element. Panics on an empty slice.
@@ -115,6 +131,28 @@ pub(crate) mod tests {
             assert!((0.0..1.0).contains(&v));
             assert!(seen.insert(v.to_bits()));
         }
+    }
+
+    #[test]
+    fn lesson_rng_is_seedable_and_does_not_cycle_early() {
+        let a: Vec<f64> = {
+            let mut r = LessonRng::seeded(7);
+            (0..5).map(|_| r.next_f64()).collect()
+        };
+        let b: Vec<f64> = {
+            let mut r = LessonRng::seeded(7);
+            (0..5).map(|_| r.next_f64()).collect()
+        };
+        assert_eq!(a, b);
+        let mut r = LessonRng::seeded(7);
+        let mut seen = std::collections::HashSet::new();
+        for _ in 0..100_000 {
+            let v = r.next_f64();
+            assert!((0.0..1.0).contains(&v));
+            assert!(seen.insert(v.to_bits()));
+        }
+        let mut e = LessonRng::from_entropy();
+        assert!((0.0..1.0).contains(&e.next_f64()));
     }
 
     #[test]

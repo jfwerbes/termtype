@@ -8,5 +8,6 @@ description = "Terminal-native adaptive touch typing tutor (port of keybr.com's 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+rand = { version = "0.9", default-features = false, features = ["small_rng", "os_rng", "std"] }
 
 [dev-dependencies]

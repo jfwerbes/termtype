@@ -4,6 +4,7 @@ pub mod histogram;
 pub mod keystats;
 pub mod lesson;
 pub mod math;
+pub mod phonetic;
 pub mod result;
 pub mod rng;
 pub mod stats;
