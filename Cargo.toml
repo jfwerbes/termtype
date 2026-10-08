@@ -6,5 +6,6 @@ license = "AGPL-3.0-only"
 description = "Terminal-native adaptive touch typing tutor (port of keybr.com's learning engine)"
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
