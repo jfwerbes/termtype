@@ -41,6 +41,19 @@ impl KeyStats {
         }
     }
 
+    /// Stats with the given timings and no samples; for fakes and tests.
+    pub fn with_times(
+        letter: char,
+        time_to_type: Option<f64>,
+        best_time_to_type: Option<f64>,
+    ) -> Self {
+        Self {
+            time_to_type,
+            best_time_to_type,
+            ..Self::new(letter)
+        }
+    }
+
     pub fn append(&mut self, result: &LessonResult) {
         if let Some(s) = result.histogram.get(self.letter)
             && s.time_to_type > 0
@@ -91,6 +104,10 @@ impl KeyStatsMap {
         for s in self.stats.values_mut() {
             s.append(result);
         }
+    }
+
+    pub fn insert(&mut self, stats: KeyStats) {
+        self.stats.insert(stats.letter, stats);
     }
 
     /// Returns stats for `letter`; unknown letters have no data.

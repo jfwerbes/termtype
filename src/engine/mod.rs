@@ -2,6 +2,7 @@
 
 pub mod histogram;
 pub mod keystats;
+pub mod lesson;
 pub mod math;
 pub mod result;
 pub mod rng;
