@@ -113,6 +113,13 @@ differs from keybr in these ways:
 Not yet ported: capitals and punctuation in lessons, learning-rate
 prediction, layouts other than QWERTY, and languages other than English.
 
+## Acknowledgements
+
+- [keybr.com](https://github.com/aradzie/keybr.com) by Aliaksandr
+  Radzivanovich, for the learning engine and assets (see above and `NOTICE`).
+- [tukai](https://github.com/hlsxx/tukai) by hlsxx, a terminal typing app
+  that influenced termtype.
+
 ## License
 
 AGPL-3.0, the same license as keybr.com, from which the algorithms and
