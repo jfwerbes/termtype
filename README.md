@@ -3,6 +3,9 @@
 Adaptive touch-typing practice in the terminal. termtype ports the learning
 engine of [keybr.com](https://www.keybr.com) to Rust and runs it as a TUI.
 
+> termtype was vibe coded with [Claude](https://claude.com/claude-code): most
+> of the code was written by Claude under my direction.
+
 - **Guided lessons.** You start with six letters. The next letter unlocks once
   every unlocked key reaches your target speed. Each lesson focuses on your
   weakest key.
