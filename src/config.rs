@@ -15,6 +15,31 @@ pub struct Config {
     pub input: InputConfig,
     pub drill: DrillConfig,
     pub theme: String,
+    /// The on-screen keyboard below the lesson.
+    pub keyboard: KeyboardLayout,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum KeyboardLayout {
+    /// Columnar split ergo halves (3x5 plus thumbs).
+    #[default]
+    Split,
+    /// Row-staggered, like a laptop keyboard.
+    Standard,
+    Off,
+}
+
+impl KeyboardLayout {
+    pub const ALL: [KeyboardLayout; 3] = [Self::Split, Self::Standard, Self::Off];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Split => "split",
+            Self::Standard => "standard",
+            Self::Off => "off",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -57,6 +82,7 @@ impl Default for Config {
             input: InputConfig::default(),
             drill: DrillConfig::default(),
             theme: "terminal".into(),
+            keyboard: KeyboardLayout::default(),
         }
     }
 }
@@ -180,9 +206,14 @@ mod tests {
     fn partial_file_fills_in_defaults() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
-        std::fs::write(&path, "theme = \"nord\"\n[drill]\nenabled = true\n").unwrap();
+        std::fs::write(
+            &path,
+            "theme = \"nord\"\nkeyboard = \"standard\"\n[drill]\nenabled = true\n",
+        )
+        .unwrap();
         let c = Config::load(&path).unwrap();
         assert_eq!(c.theme, "nord");
+        assert_eq!(c.keyboard, KeyboardLayout::Standard);
         assert!(c.drill.enabled);
         assert_eq!(c.drill.repeat_count, 10);
         assert_eq!(c.lesson, LessonConfig::default());
@@ -205,6 +236,7 @@ mod tests {
         let mut c = Config::default();
         c.lesson.target_wpm = 50.0;
         c.drill.enabled = true;
+        c.keyboard = KeyboardLayout::Off;
         c.save(&path).unwrap();
         assert_eq!(Config::load(&path).unwrap(), c);
         assert!(!path.with_extension("tmp").exists());

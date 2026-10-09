@@ -1,3 +1,4 @@
+use super::keyboard;
 use super::{border_label, border_note, centered, footer, keys_panel, panel, wrap_chars};
 use crate::app::App;
 use crate::engine::result::cpm_to_wpm;
@@ -60,8 +61,9 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
         .map(|line| Line::from(line.iter().map(char_span).collect::<Vec<_>>()))
         .collect();
 
+    // Named after the text actually shown, so a fallback reads as guided.
     let title = if app.targets.is_empty() {
-        "termtype"
+        "guided"
     } else {
         "transitions"
     };
@@ -118,18 +120,36 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
     }
 
     let lesson_height = visible as u16 + 4;
-    let body = centered(area, width, lesson_height + 4 + 2);
-    let [lesson_area, keys_area, _, footer_area] = Layout::vertical([
+    let height = lesson_height + 4 + 2;
+    // The keyboard is a nice-to-have: drop it rather than squeeze the rest.
+    // Sized for the tallest lesson, so it doesn't come and go between lessons.
+    let tallest = TEXT_LINES as u16 + 4 + 4 + 2;
+    let keyboard_height = if keyboard::fits(app.config.keyboard, width)
+        && area.height >= tallest + keyboard::HEIGHT
+    {
+        keyboard::HEIGHT
+    } else {
+        0
+    };
+    let body = centered(area, width, height + keyboard_height);
+    let [lesson_area, keys_area, keyboard_area, _, footer_area] = Layout::vertical([
         Constraint::Length(lesson_height),
         Constraint::Length(4),
+        Constraint::Length(keyboard_height),
         Constraint::Length(1),
         Constraint::Length(1),
     ])
     .areas(body);
     frame.render_widget(Paragraph::new(lines).block(block), lesson_area);
     keys_panel(frame, app, keys_area);
+    if keyboard_height > 0 {
+        keyboard::draw(frame, app, keyboard_area);
+    }
     frame.render_widget(
-        footer(theme, "esc menu · tab new lesson · ctrl-w delete word"),
+        footer(
+            theme,
+            "esc menu & modes · tab new lesson · ctrl-w delete word",
+        ),
         footer_area,
     );
 }

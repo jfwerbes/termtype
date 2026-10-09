@@ -1,7 +1,7 @@
 //! Application state machine. No I/O: inputs come in with timestamps and
 //! side effects go out as `Effect`s for `main` to perform.
 
-use crate::config::Config;
+use crate::config::{Config, KeyboardLayout};
 use crate::engine::keystats::KeyStatsMap;
 use crate::engine::lesson::LessonKeys;
 use crate::engine::phonetic::PhoneticModel;
@@ -10,6 +10,7 @@ use crate::engine::rng::LessonRng;
 use crate::engine::session::Session;
 use crate::engine::stats::make_stats;
 use crate::engine::textgen::{self, Dictionary};
+use crate::engine::textinput::Feedback;
 use crate::engine::transitions;
 use crate::theme::Theme;
 
@@ -28,6 +29,25 @@ pub enum LessonMode {
     Guided,
     /// Words built around the slowest key transitions.
     Transitions,
+}
+
+impl LessonMode {
+    pub const ALL: [LessonMode; 2] = [Self::Guided, Self::Transitions];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Guided => "guided",
+            Self::Transitions => "transitions",
+        }
+    }
+
+    /// The menu key that switches to this mode.
+    pub fn key(self) -> char {
+        match self {
+            Self::Guided => 'g',
+            Self::Transitions => 't',
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +71,21 @@ pub enum Input {
 pub enum Effect {
     SaveResult(LessonResult),
     SaveConfig(Config),
+    /// Delete the saved lesson history.
+    ClearResults,
+}
+
+/// How long a pressed key stays lit on the on-screen keyboard, in ms.
+pub const FLASH_MS: f64 = 150.0;
+
+/// A key typed during a lesson, for the on-screen keyboard.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct KeyPress {
+    pub key: char,
+    /// Monotonic ms.
+    pub at: f64,
+    /// Whether it was the right key.
+    pub ok: bool,
 }
 
 /// What happened in the last finished lesson.
@@ -78,11 +113,13 @@ pub enum Field {
     SpaceSkipsWords,
     Drill,
     DrillRepeatCount,
+    Keyboard,
     Theme,
+    ClearProgress,
 }
 
 impl Field {
-    pub const ALL: [Field; 12] = [
+    pub const ALL: [Field; 14] = [
         Field::TargetWpm,
         Field::AlphabetSize,
         Field::RecoverKeys,
@@ -94,7 +131,9 @@ impl Field {
         Field::SpaceSkipsWords,
         Field::Drill,
         Field::DrillRepeatCount,
+        Field::Keyboard,
         Field::Theme,
+        Field::ClearProgress,
     ];
 
     pub fn label(self) -> &'static str {
@@ -110,7 +149,9 @@ impl Field {
             Field::SpaceSkipsWords => "Space skips word",
             Field::Drill => "Retype drill",
             Field::DrillRepeatCount => "Drill repetitions",
+            Field::Keyboard => "Keyboard",
             Field::Theme => "Theme",
+            Field::ClearProgress => "Clear progress",
         }
     }
 }
@@ -125,6 +166,8 @@ pub struct App {
     pub session: Session,
     pub last_lesson: Option<LessonSummary>,
     pub settings_cursor: usize,
+    /// Whether settings is asking to confirm clearing progress.
+    pub confirm_clear: bool,
     pub should_quit: bool,
     pub mode: LessonMode,
     /// Transitions the current lesson drills (transition mode only).
@@ -133,6 +176,8 @@ pub struct App {
     pub notice: Option<String>,
     /// Monotonic ms, updated on every input; used for live speed.
     pub now: f64,
+    /// Recent key presses, newest last.
+    pub presses: Vec<KeyPress>,
     letters: Vec<char>,
     model: PhoneticModel,
     dictionary: Dictionary,
@@ -164,11 +209,13 @@ impl App {
             session,
             last_lesson: None,
             settings_cursor: 0,
+            confirm_clear: false,
             should_quit: false,
             mode: LessonMode::Guided,
             targets: vec![],
             notice: None,
             now: 0.0,
+            presses: vec![],
             letters,
             model,
             dictionary: Dictionary::english(),
@@ -312,7 +359,13 @@ impl App {
             Input::Char(c) => {
                 let time_to_type = self.last_input_at.map_or(0.0, |t| now - t);
                 self.last_input_at = Some(now);
-                self.session.type_char(now, c, time_to_type);
+                let feedback = self.session.type_char(now, c, time_to_type);
+                self.presses.retain(|p| now - p.at < FLASH_MS);
+                self.presses.push(KeyPress {
+                    key: c.to_ascii_lowercase(),
+                    at: now,
+                    ok: feedback != Feedback::Failed,
+                });
                 if self.session.completed() {
                     return self.finish_lesson(unix_ms);
                 }
@@ -331,7 +384,28 @@ impl App {
     }
 
     fn handle_settings(&mut self, input: Input) -> Vec<Effect> {
+        if self.confirm_clear {
+            match input {
+                Input::Char('y') => {
+                    self.confirm_clear = false;
+                    return self.clear_progress();
+                }
+                Input::Char('n') | Input::Esc => self.confirm_clear = false,
+                _ => {}
+            }
+            return vec![];
+        }
         let field = Field::ALL[self.settings_cursor];
+        if field == Field::ClearProgress {
+            match input {
+                Input::Right | Input::Enter | Input::Char(' ') if !self.results.is_empty() => {
+                    self.confirm_clear = true;
+                    return vec![];
+                }
+                Input::Left | Input::Right | Input::Enter | Input::Char(' ') => return vec![],
+                _ => {}
+            }
+        }
         let delta = match input {
             Input::Up => {
                 self.settings_cursor = self.settings_cursor.saturating_sub(1);
@@ -354,6 +428,17 @@ impl App {
         self.new_lesson();
         self.screen = Screen::Settings;
         vec![Effect::SaveConfig(self.config.clone())]
+    }
+
+    /// Forgets every lesson: keys start over from the first letters.
+    fn clear_progress(&mut self) -> Vec<Effect> {
+        self.results.clear();
+        self.key_stats = KeyStatsMap::from_results(&self.letters, &self.results);
+        self.last_lesson = None;
+        self.update_keys();
+        self.new_lesson();
+        self.screen = Screen::Settings;
+        vec![Effect::ClearResults]
     }
 
     fn adjust(&mut self, field: Field, delta: i32) {
@@ -381,6 +466,11 @@ impl App {
             Field::DrillRepeatCount => {
                 c.drill.repeat_count = step_count(c.drill.repeat_count, 1, 50)
             }
+            Field::Keyboard => {
+                let all = KeyboardLayout::ALL;
+                let current = all.iter().position(|&k| k == c.keyboard).unwrap_or(0) as i32;
+                c.keyboard = all[(current + delta).rem_euclid(all.len() as i32) as usize];
+            }
             Field::Theme => {
                 let n = self.themes.len() as i32;
                 let current = self
@@ -392,7 +482,22 @@ impl App {
                     .name
                     .clone();
             }
+            Field::ClearProgress => {}
         }
+    }
+
+    /// Key presses still lit at `now`.
+    pub fn lit_keys(&self) -> impl Iterator<Item = &KeyPress> {
+        self.presses
+            .iter()
+            .filter(|p| (0.0..FLASH_MS).contains(&(self.now - p.at)))
+    }
+
+    /// Ms until the last lit key goes dark, so the screen can be redrawn.
+    pub fn flash_ends_in(&self) -> Option<f64> {
+        self.lit_keys()
+            .map(|p| p.at + FLASH_MS - self.now)
+            .reduce(f64::max)
     }
 
     /// Live speed of the current lesson in CPM.
@@ -423,7 +528,9 @@ impl App {
             Field::Drill => on_off(c.drill.enabled),
             Field::RepeatWords => format!("{}×", c.lesson.repeat_words),
             Field::DrillRepeatCount => format!("{}×", c.drill.repeat_count),
+            Field::Keyboard => c.keyboard.name().to_string(),
             Field::Theme => c.theme.clone(),
+            Field::ClearProgress => lessons(self.results.len()),
         }
     }
 
@@ -437,6 +544,11 @@ impl App {
         self.last_input_at = None;
         self.screen = Screen::Practice;
     }
+}
+
+/// "1 lesson", "2 lessons".
+pub fn lessons(n: usize) -> String {
+    format!("{n} lesson{}", if n == 1 { "" } else { "s" })
 }
 
 #[cfg(test)]
@@ -700,6 +812,56 @@ pub(crate) mod tests {
         assert!(app.session.input().has_typo());
     }
 
+    fn open_clear_progress(app: &mut App) {
+        app.handle(Input::Esc, 0.0, 0);
+        app.handle(Input::Char('s'), 0.0, 0);
+        while Field::ALL[app.settings_cursor] != Field::ClearProgress {
+            app.handle(Input::Down, 0.0, 0);
+        }
+    }
+
+    #[test]
+    fn clear_progress_asks_before_deleting() {
+        let mut app = app_with(Config::default(), transition_history());
+        open_clear_progress(&mut app);
+        assert_eq!(app.field_value(Field::ClearProgress), "1 lesson");
+        assert!(app.handle(Input::Enter, 0.0, 0).is_empty());
+        assert!(app.confirm_clear);
+        // Other keys do nothing while asking; n and esc cancel.
+        assert!(app.handle(Input::Char('x'), 0.0, 0).is_empty());
+        assert!(app.handle(Input::Down, 0.0, 0).is_empty());
+        assert!(app.confirm_clear);
+        app.handle(Input::Char('n'), 0.0, 0);
+        assert!(!app.confirm_clear);
+        app.handle(Input::Right, 0.0, 0);
+        app.handle(Input::Esc, 0.0, 0);
+        assert!(!app.confirm_clear);
+        assert_eq!(app.screen, Screen::Settings);
+        assert_eq!(app.results.len(), 1);
+        // Left never opens it.
+        app.handle(Input::Left, 0.0, 0);
+        assert!(!app.confirm_clear);
+    }
+
+    #[test]
+    fn clear_progress_confirmed_resets_history() {
+        let mut app = app_with(Config::default(), transition_history());
+        let lesson = lesson_text(&app);
+        type_str(&mut app, &lesson, 0.0);
+        open_clear_progress(&mut app);
+        app.handle(Input::Enter, 0.0, 0);
+        let effects = app.handle(Input::Char('y'), 0.0, 0);
+        assert_eq!(effects, [Effect::ClearResults]);
+        assert!(!app.confirm_clear);
+        assert!(app.results.is_empty());
+        assert!(app.last_lesson.is_none());
+        assert_eq!(app.screen, Screen::Settings);
+        assert_eq!(app.keys.included_letters().len(), 6);
+        // Nothing left to clear: no dialog.
+        app.handle(Input::Enter, 0.0, 0);
+        assert!(!app.confirm_clear);
+    }
+
     #[test]
     fn settings_edit_saves_config_and_rebuilds_lesson() {
         let mut app = app();
@@ -726,6 +888,8 @@ pub(crate) mod tests {
         for _ in 0..20 {
             app.handle(Input::Down, 0.0, 0);
         }
+        assert_eq!(Field::ALL[app.settings_cursor], Field::ClearProgress);
+        app.handle(Input::Up, 0.0, 0);
         assert_eq!(Field::ALL[app.settings_cursor], Field::Theme);
         app.handle(Input::Right, 0.0, 0);
         assert_eq!(app.config.theme, "gruvbox");

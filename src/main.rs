@@ -54,8 +54,10 @@ fn run(terminal: &mut DefaultTerminal, mut app: App, paths: &Paths) -> Result<()
     while !app.should_quit {
         app.now = now();
         terminal.draw(|f| termtype::ui::draw(f, &app))?;
-        // Wake regularly so the live speed keeps updating.
-        if !event::poll(Duration::from_millis(250))? {
+        // Wake regularly so the live speed keeps updating, and when a lit
+        // key on the keyboard should go dark.
+        let wait = app.flash_ends_in().map_or(250.0, |ms| ms.min(250.0));
+        if !event::poll(Duration::from_millis(wait.ceil() as u64 + 1))? {
             continue;
         }
         let Event::Key(key) = event::read()? else {
@@ -70,6 +72,7 @@ fn run(terminal: &mut DefaultTerminal, mut app: App, paths: &Paths) -> Result<()
                 Effect::SaveResult(r) => store::append_result(&paths.results_file(), &r)
                     .with_context(|| format!("saving to {}", paths.results_file().display()))?,
                 Effect::SaveConfig(c) => c.save(&paths.config_file())?,
+                Effect::ClearResults => store::clear_results(&paths.results_file())?,
             }
         }
     }
@@ -100,7 +103,8 @@ Lessons start with six letters and unlock the next one once every
 unlocked key reaches the target speed (keybr.com's method).
 
 Keys while typing:  esc menu · tab new lesson · ctrl-w / ctrl-backspace delete word
-Keys in the menu:   enter practice · k key stats · s settings · q quit
+Keys in the menu:   enter practice · g guided · t transition drills
+                    k key stats · s settings · q quit
 
 Files:
   config   {}

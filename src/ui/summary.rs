@@ -1,6 +1,7 @@
 use super::{border_note, centered, footer, keys_panel, panel};
-use crate::app::App;
+use crate::app::{App, LessonMode};
 use crate::engine::result::cpm_to_wpm;
+use crate::engine::transitions;
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
@@ -68,9 +69,24 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
     let spark_height = if speeds.len() >= 2 { 4 } else { 0 };
     let progress_height = spark_height + 1 + 2;
 
-    let body = centered(area, width, lesson_height + progress_height + 4 + 2);
-    let [lesson_area, progress_area, keys_area, _, footer_area] = Layout::vertical([
+    let mode_lines = mode_lines(app);
+    let mode_height = mode_lines.len() as u16 + 2;
+
+    let body = centered(
+        area,
+        width,
+        lesson_height + mode_height + progress_height + 4 + 2,
+    );
+    let [
+        lesson_area,
+        mode_area,
+        progress_area,
+        keys_area,
+        _,
+        footer_area,
+    ] = Layout::vertical([
         Constraint::Length(lesson_height),
+        Constraint::Length(mode_height),
         Constraint::Length(progress_height),
         Constraint::Length(4),
         Constraint::Length(1),
@@ -81,6 +97,14 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(
         Paragraph::new(lesson_lines).block(panel(theme, title)),
         lesson_area,
+    );
+
+    frame.render_widget(
+        Paragraph::new(mode_lines).block(panel(theme, "mode").title_top(border_note(
+            theme,
+            vec![Span::styled("enter keeps the current mode", muted)],
+        ))),
+        mode_area,
     );
 
     let progress = panel(theme, "progress").title_top(border_note(
@@ -110,6 +134,48 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
         ),
         footer_area,
     );
+}
+
+/// One line per lesson mode, the current one marked.
+fn mode_lines(app: &App) -> Vec<Line<'static>> {
+    let theme = app.theme();
+    let muted = Style::new().fg(theme.muted);
+    let targets = transitions::weak_transitions(&app.results, &app.keys.included_letters());
+    LessonMode::ALL
+        .iter()
+        .map(|&mode| {
+            let current = mode == app.mode;
+            let (marker, style) = if current {
+                (
+                    "› ",
+                    Style::new().fg(theme.accent).add_modifier(Modifier::BOLD),
+                )
+            } else {
+                ("  ", Style::new().fg(theme.text))
+            };
+            let about = match mode {
+                LessonMode::Guided => "unlock letters, drill the weakest key".to_string(),
+                LessonMode::Transitions if targets.is_empty() => {
+                    "slowest letter pairs · needs more lessons first".to_string()
+                }
+                LessonMode::Transitions => {
+                    format!("slowest letter pairs: {}", targets.join(" · "))
+                }
+            };
+            Line::from(vec![
+                Span::styled(format!("{marker}{} ", mode.key()), style),
+                Span::styled(format!("{:<13}", mode.name()), style),
+                Span::styled(
+                    about,
+                    if current {
+                        Style::new().fg(theme.text)
+                    } else {
+                        muted
+                    },
+                ),
+            ])
+        })
+        .collect()
 }
 
 fn history_line(app: &App) -> Line<'static> {

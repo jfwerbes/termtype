@@ -19,7 +19,14 @@ engine of [keybr.com](https://www.keybr.com) to Rust and runs it as a TUI.
   3 slowest letter-to-letter transitions over the last 50 lessons. Words take
   turns drilling each pair. A pair needs 10 typings before it counts. Targets
   are recomputed every lesson, so a pair drops off once it gets faster. Press
-  `g` to return to guided lessons.
+  `g` to return to guided lessons. The menu's mode panel shows which mode is
+  on (it sticks across lessons) and your current slowest pairs.
+- **Clear progress.** The last setting deletes your lesson history after a
+  confirmation. The old history is moved to `results.jsonl.bak` until the
+  next clear.
+- **On-screen keyboard.** Boxed keys below the lesson light up as you type
+  them (red for a wrong key). Split ergo layout by default; also `standard`
+  or `off`. It hides itself when the terminal is too small.
 - **Themes.** TOML files with hex colours. Built-ins: `terminal` (uses your
   terminal's palette), `gruvbox`, `catppuccin-mocha`, `nord`.
 
@@ -34,7 +41,7 @@ termtype
 |----------|-------------------------------------------------------------------------------|
 | Typing   | `esc` menu · `tab` new lesson · `ctrl-w` / `ctrl-backspace` delete word · `ctrl-c` quit |
 | Menu     | `enter` next lesson · `t` transition drills · `g` guided lessons · `k` key stats · `s` settings · `q` quit |
-| Settings | `↑↓` select · `←→` / `enter` change · `esc` back                             |
+| Settings | `↑↓` select · `←→` / `enter` change · `esc` back · on *Clear progress*: `y` confirm, `n` / `esc` cancel |
 
 ## Files
 
@@ -43,6 +50,7 @@ termtype
 | `~/.config/termtype/config.toml` | settings (also editable in the app) |
 | `~/.config/termtype/themes/<name>.toml` | your themes |
 | `~/.local/share/termtype/results.jsonl` | lesson history, one JSON object per line |
+| `~/.local/share/termtype/results.jsonl.bak` | the history from before the last *Clear progress* |
 
 Per-key statistics are always recomputed from the history, so the history is
 the only state that matters.
@@ -53,6 +61,7 @@ All keys are optional, and unknown keys are reported as errors.
 
 ```toml
 theme = "terminal"
+keyboard = "split"     # split, standard or off
 
 [lesson]
 target_wpm = 35        # a key is learned at this speed

@@ -75,6 +75,22 @@ pub fn append_result(path: &Path, result: &LessonResult) -> Result<()> {
     Ok(())
 }
 
+/// Moves the history aside to `<file>.bak`, replacing any older backup.
+pub fn clear_results(path: &Path) -> Result<()> {
+    match std::fs::rename(path, backup_path(path)) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+            Err(e).with_context(|| format!("cannot clear {}", path.display()))
+        }
+        _ => Ok(()),
+    }
+}
+
+pub fn backup_path(path: &Path) -> PathBuf {
+    let mut name = path.as_os_str().to_owned();
+    name.push(".bak");
+    name.into()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,5 +140,18 @@ mod tests {
                 .unwrap()
                 .contains("{not json")
         );
+    }
+
+    #[test]
+    fn clear_moves_history_to_backup() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("results.jsonl");
+        let r1 = fake_result(1, &[('a', 100)]);
+        append_result(&path, &r1).unwrap();
+        clear_results(&path).unwrap();
+        assert!(load_results(&path).unwrap().results.is_empty());
+        assert_eq!(load_results(&backup_path(&path)).unwrap().results, vec![r1]);
+        // Nothing to clear is fine.
+        clear_results(&path).unwrap();
     }
 }

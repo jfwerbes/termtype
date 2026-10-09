@@ -1,5 +1,6 @@
 //! Rendering. Every function here only reads `App`.
 
+mod keyboard;
 mod keystats;
 mod practice;
 mod settings;
@@ -198,8 +199,8 @@ fn footer(theme: &Theme, text: &str) -> Paragraph<'static> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::app::Input;
     use crate::app::tests::{app, app_with, type_str};
+    use crate::app::{FLASH_MS, Field, Input};
     use crate::config::Config;
     use crate::engine::textinput::Attr;
     use ratatui::Terminal;
@@ -303,7 +304,7 @@ mod tests {
         let app = app();
         let buf = render(&app, 90, 30);
         let text = screen_text(&buf);
-        let lesson = row_of(&buf, "╭─ termtype").expect(&text);
+        let lesson = row_of(&buf, "╭─ guided").expect(&text);
         let keys = row_of(&buf, "╭─ keys").expect(&text);
         let footer = row_of(&buf, "esc menu").expect(&text);
         assert!(lesson < keys && keys < footer, "{text}");
@@ -366,6 +367,84 @@ mod tests {
         app
     }
 
+    /// The top row of the on-screen keyboard.
+    fn keyboard_row(buf: &Buffer) -> Option<u16> {
+        row_of(buf, "│ q │").map(|r| r as u16 - 1)
+    }
+
+    /// The background behind a key's label on the on-screen keyboard.
+    fn key_bg(buf: &Buffer, label: &str) -> ratatui::style::Color {
+        let top = keyboard_row(buf).unwrap();
+        let p = (top..top + keyboard::HEIGHT)
+            .flat_map(|y| (0..buf.area.width).map(move |x| (x, y)))
+            .find(|&p| buf[p].symbol() == label)
+            .unwrap();
+        buf[p].bg
+    }
+
+    #[test]
+    fn practice_keyboard_sits_between_keys_and_footer() {
+        let app = app();
+        let buf = render(&app, 90, 30);
+        let text = screen_text(&buf);
+        let keys = row_of(&buf, "╭─ keys").expect(&text) as u16;
+        let keyboard = keyboard_row(&buf).expect(&text);
+        let footer = row_of(&buf, "esc menu").expect(&text) as u16;
+        assert!(
+            keys < keyboard && keyboard + keyboard::HEIGHT <= footer,
+            "{text}"
+        );
+        // Split by default: boxed keys, halves apart.
+        assert!(
+            text.contains("│ q │ w │ e │ r │ t │   │ y │ u │ i │ o │ p │"),
+            "{text}"
+        );
+        assert!(text.contains("├───┼───┼"), "{text}");
+    }
+
+    #[test]
+    fn practice_keyboard_lights_up_typed_keys() {
+        let mut app = app();
+        app.start_with_text("ab cd");
+        // Nothing is lit before typing, not even the next key.
+        let buf = render(&app, 90, 30);
+        assert_eq!(key_bg(&buf, "a"), app.theme().background);
+
+        type_str(&mut app, "a", 0.0);
+        let buf = render(&app, 90, 30);
+        assert_eq!(key_bg(&buf, "a"), app.theme().accent);
+        assert_eq!(key_bg(&buf, "b"), app.theme().background);
+
+        // A wrong key lights up red.
+        type_str(&mut app, "x", 100.0);
+        let buf = render(&app, 90, 30);
+        assert_eq!(key_bg(&buf, "x"), app.theme().error);
+        assert_eq!(app.flash_ends_in(), Some(FLASH_MS));
+
+        // Keys go dark once the flash is over.
+        app.now = 100.0 + FLASH_MS;
+        let buf = render(&app, 90, 30);
+        assert_eq!(key_bg(&buf, "a"), app.theme().background);
+        assert_eq!(key_bg(&buf, "x"), app.theme().background);
+        assert_eq!(app.flash_ends_in(), None);
+    }
+
+    #[test]
+    fn practice_keyboard_can_be_hidden() {
+        let mut app = app();
+        // Too short: the keyboard goes, the rest stays.
+        let text = screen_text(&render(&app, 90, 18));
+        assert!(!text.contains("│ q │"), "{text}");
+        assert!(text.contains("╭─ keys"), "{text}");
+        app.config.keyboard = crate::config::KeyboardLayout::Off;
+        let text = screen_text(&render(&app, 90, 30));
+        assert!(!text.contains("│ q │"), "{text}");
+        app.config.keyboard = crate::config::KeyboardLayout::Standard;
+        let text = screen_text(&render(&app, 90, 30));
+        assert!(text.contains("│ q │ w │ e │ r │ t │ y │"), "{text}");
+        assert!(text.contains("╰─┬─┴─┬─"), "staggered rows: {text}");
+    }
+
     #[test]
     fn transition_lesson_shows_title_and_targets() {
         let app = transition_app();
@@ -381,6 +460,56 @@ mod tests {
         app.handle(Input::Char('t'), 0.0, 0);
         let text = screen_text(&render(&app, 90, 30));
         assert!(text.contains("not enough transition data"), "{text}");
+    }
+
+    #[test]
+    fn practice_title_names_the_mode() {
+        let text = screen_text(&render(&app(), 90, 30));
+        assert!(text.contains("╭─ guided"), "{text}");
+        assert!(text.contains("esc menu & modes"), "{text}");
+    }
+
+    #[test]
+    fn summary_mode_panel_marks_current_mode() {
+        let mut app = transition_app();
+        app.handle(Input::Esc, 0.0, 0);
+        let text = screen_text(&render(&app, 90, 30));
+        assert!(text.contains("╭─ mode"), "{text}");
+        assert!(text.contains("  g guided"), "{text}");
+        assert!(
+            text.contains("› t transitions  slowest letter pairs: rl · ea · ni"),
+            "{text}"
+        );
+        app.handle(Input::Char('g'), 0.0, 0);
+        app.handle(Input::Esc, 0.0, 0);
+        let text = screen_text(&render(&app, 90, 30));
+        assert!(text.contains("› g guided"), "{text}");
+    }
+
+    #[test]
+    fn summary_mode_panel_says_when_transitions_need_data() {
+        let mut app = app();
+        app.handle(Input::Esc, 0.0, 0);
+        let text = screen_text(&render(&app, 90, 30));
+        assert!(text.contains("needs more lessons first"), "{text}");
+    }
+
+    #[test]
+    fn settings_clear_progress_dialog() {
+        let mut app = transition_app();
+        app.screen = Screen::Settings;
+        app.settings_cursor = Field::ALL.len() - 1;
+        let text = screen_text(&render(&app, 90, 30));
+        assert!(
+            text.contains("Clear progress") && text.contains("1 lesson "),
+            "{text}"
+        );
+        assert!(!text.contains("clear progress?"), "{text}");
+        app.handle(Input::Enter, 0.0, 0);
+        let text = screen_text(&render(&app, 90, 30));
+        assert!(text.contains("╭─ clear progress?"), "{text}");
+        assert!(text.contains("This deletes all 1 lesson of"), "{text}");
+        assert!(text.contains("y clear · n or esc cancel"), "{text}");
     }
 
     #[test]
@@ -400,7 +529,7 @@ mod tests {
         let text: String = app.session.input().text().iter().take(5).collect();
         type_str(&mut app, &text, 0.0);
         let buf = render(&app, 90, 30);
-        let title_row = row_of(&buf, "╭─ termtype").unwrap();
+        let title_row = row_of(&buf, "╭─ guided").unwrap();
         let line = screen_text(&buf)
             .lines()
             .nth(title_row)

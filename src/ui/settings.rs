@@ -4,7 +4,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Padding, Paragraph};
+use ratatui::widgets::{Clear, Padding, Paragraph, Wrap};
 
 const WIDTH: u16 = 66;
 
@@ -21,7 +21,9 @@ fn help(field: Field) -> &'static str {
         Field::SpaceSkipsWords => "Space jumps to the next word, counting the rest as errors.",
         Field::Drill => "A mistake stops you; the word must then be retyped cleanly.",
         Field::DrillRepeatCount => "How many clean repetitions the drill asks for.",
+        Field::Keyboard => "On-screen keyboard below the lesson: split, standard or off.",
         Field::Theme => "Colours. Add your own in ~/.config/termtype/themes/.",
+        Field::ClearProgress => "Delete your lesson history and start over. Asks first.",
     }
 }
 
@@ -73,8 +75,60 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
     .areas(body);
     let block = panel(theme, "settings").padding(Padding::new(2, 2, 1, 1));
     frame.render_widget(Paragraph::new(lines).block(block), panel_area);
+    if app.confirm_clear {
+        confirm_clear(frame, app, panel_area);
+        frame.render_widget(footer(theme, "y clear · n or esc cancel"), footer_area);
+    } else {
+        frame.render_widget(
+            footer(theme, "↑↓ select · ←→ or enter change · esc back"),
+            footer_area,
+        );
+    }
+}
+
+/// The warning shown before clearing progress, over the settings panel.
+fn confirm_clear(frame: &mut Frame, app: &App, area: Rect) {
+    let theme = app.theme();
+    let text = Style::new().fg(theme.text);
+    let lines = vec![
+        Line::from(vec![
+            Span::styled("This deletes all ", text),
+            Span::styled(
+                crate::app::lessons(app.results.len()),
+                Style::new().fg(theme.error).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" of history:", text),
+        ]),
+        Line::styled("key speeds, unlocked letters and transition stats.", text),
+        Line::styled(
+            "Settings and themes are kept. The old history is moved to results.jsonl.bak until the next clear.",
+            Style::new().fg(theme.muted),
+        ),
+        Line::default(),
+        Line::from(vec![
+            Span::styled(
+                "y",
+                Style::new().fg(theme.error).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" clear everything   ", text),
+            Span::styled(
+                "n",
+                Style::new().fg(theme.accent).add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(" keep my progress", text),
+        ]),
+    ];
+    let width = area.width.saturating_sub(4).min(60);
+    let dialog = centered(area, width, 10);
+    let block = panel(theme, "clear progress?")
+        .border_style(Style::new().fg(theme.error))
+        .padding(Padding::new(2, 2, 1, 1));
+    frame.render_widget(Clear, dialog);
     frame.render_widget(
-        footer(theme, "↑↓ select · ←→ or enter change · esc back"),
-        footer_area,
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: true })
+            .style(Style::new().bg(theme.background))
+            .block(block),
+        dialog,
     );
 }
