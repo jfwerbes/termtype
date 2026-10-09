@@ -394,12 +394,12 @@ mod tests {
             keys < keyboard && keyboard + keyboard::HEIGHT <= footer,
             "{text}"
         );
-        // Split by default: boxed keys, halves apart.
+        // Standard by default: boxed keys, staggered rows.
         assert!(
-            text.contains("│ q │ w │ e │ r │ t │   │ y │ u │ i │ o │ p │"),
+            text.contains("│ q │ w │ e │ r │ t │ y │ u │ i │ o │ p │"),
             "{text}"
         );
-        assert!(text.contains("├───┼───┼"), "{text}");
+        assert!(text.contains("╰─┬─┴─┬─"), "staggered rows: {text}");
     }
 
     #[test]
@@ -439,10 +439,10 @@ mod tests {
         app.config.keyboard = crate::config::KeyboardLayout::Off;
         let text = screen_text(&render(&app, 90, 30));
         assert!(!text.contains("│ q │"), "{text}");
-        app.config.keyboard = crate::config::KeyboardLayout::Standard;
+        app.config.keyboard = crate::config::KeyboardLayout::Split;
         let text = screen_text(&render(&app, 90, 30));
-        assert!(text.contains("│ q │ w │ e │ r │ t │ y │"), "{text}");
-        assert!(text.contains("╰─┬─┴─┬─"), "staggered rows: {text}");
+        assert!(text.contains("│ q │ w │ e │ r │ t │   │ y │"), "halves apart: {text}");
+        assert!(text.contains("├───┼───┼"), "{text}");
     }
 
     #[test]

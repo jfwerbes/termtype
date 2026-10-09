@@ -19,7 +19,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 use std::process::Command;
 use termtype::app::{App, Field, Input};
-use termtype::config::Config;
+use termtype::config::{Config, KeyboardLayout};
 use termtype::engine::rng::LessonRng;
 use termtype::theme::Theme;
 
@@ -62,11 +62,13 @@ fn main() -> Result<()> {
     typist.type_some(&mut app, &mut clock, LESSONS, 37);
     save("guided", &app, 80, 26)?;
 
-    // A bigram drill.
+    // A bigram drill, with the split keyboard.
     app.handle(Input::Esc, clock.now, clock.unix());
+    app.config.keyboard = KeyboardLayout::Split;
     app.handle(Input::Char('b'), clock.now, clock.unix());
     typist.type_some(&mut app, &mut clock, LESSONS, 13);
     save("bigrams", &app, 80, 26)?;
+    app.config.keyboard = KeyboardLayout::default();
 
     // Settings, asking before clearing progress.
     app.handle(Input::Esc, clock.now, clock.unix());

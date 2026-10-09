@@ -6,7 +6,7 @@ engine of [keybr.com](https://www.keybr.com) to Rust and runs it as a TUI.
 > termtype was vibe coded with [Claude](https://claude.com/claude-code): most
 > of the code was written by Claude under my direction.
 
-![A guided lesson: the text with the cursor, the unlocked keys and the on-screen split keyboard](docs/screenshots/guided.png)
+![A guided lesson: the text with the cursor, the unlocked keys and the on-screen keyboard](docs/screenshots/guided.png)
 
 - **Guided lessons.** You start with six letters. The next letter unlocks once
   every unlocked key reaches your target speed. Each lesson focuses on your
@@ -32,8 +32,8 @@ engine of [keybr.com](https://www.keybr.com) to Rust and runs it as a TUI.
   confirmation. The old history is moved to `results.jsonl.bak` until the
   next clear.
 - **On-screen keyboard.** Boxed keys below the lesson light up as you type
-  them (red for a wrong key). Split ergo layout by default; also `standard`
-  or `off`. It hides itself when the terminal is too small.
+  them (red for a wrong key). Standard row-staggered layout by default; also
+  `split` (columnar ergo halves) or `off`. It hides itself when the terminal is too small.
 - **Themes.** TOML files with hex colours. Built-ins: `terminal` (uses your
   terminal's palette), `gruvbox`, `catppuccin-mocha`, `nord`.
 
@@ -43,9 +43,9 @@ The menu after a lesson, with the mode panel:
 
 ![The menu: last lesson, the three modes with their target pairs, a progress sparkline and the keys](docs/screenshots/menu.png)
 
-A bigram drill, typing each slow pair 5 times:
+A bigram drill, typing each slow pair 5 times, with the `split` keyboard:
 
-![A bigram drill: rl, ea, ar, in and al typed five times each](docs/screenshots/bigrams.png)
+![A bigram drill: rl, ea, ar, in, al, ll and il typed five times each, above the split keyboard](docs/screenshots/bigrams.png)
 
 Key stats (`k`), with per-key progress and the slowest transitions:
 
@@ -96,7 +96,7 @@ All keys are optional, and unknown keys are reported as errors.
 
 ```toml
 theme = "terminal"
-keyboard = "split"     # split, standard or off
+keyboard = "standard"  # standard, split or off
 
 [lesson]
 target_wpm = 35        # a key is learned at this speed

@@ -21,7 +21,7 @@ fn help(field: Field) -> &'static str {
         Field::SpaceSkipsWords => "Space jumps to the next word, counting the rest as errors.",
         Field::Drill => "A mistake stops you; the word must then be retyped cleanly.",
         Field::DrillRepeatCount => "How many clean repetitions the drill asks for.",
-        Field::Keyboard => "On-screen keyboard below the lesson: split, standard or off.",
+        Field::Keyboard => "On-screen keyboard below the lesson: standard, split or off.",
         Field::Theme => "Colours. Add your own in ~/.config/termtype/themes/.",
         Field::ClearProgress => "Delete your lesson history and start over. Asks first.",
     }
