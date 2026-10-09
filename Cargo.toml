@@ -1,9 +1,14 @@
 [package]
 name = "termtype"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
 license = "AGPL-3.0-only"
 description = "Terminal-native adaptive touch typing tutor (port of keybr.com's learning engine)"
+repository = "https://github.com/jfwerbes/termtype"
+readme = "README.md"
+keywords = ["typing", "touch-typing", "tui", "keybr", "terminal"]
+categories = ["command-line-utilities"]
+exclude = ["docs/"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
