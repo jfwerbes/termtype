@@ -1,5 +1,5 @@
 use super::{border_note, centered, footer, keys_panel, panel};
-use crate::app::{App, LessonMode};
+use crate::app::{App, LessonMode, lessons};
 use crate::engine::result::cpm_to_wpm;
 use crate::engine::transitions;
 use ratatui::Frame;
@@ -10,6 +10,8 @@ use ratatui::widgets::{Paragraph, Sparkline};
 
 const MAX_WIDTH: u16 = 76;
 const HISTORY: usize = 70;
+/// Bigram drill pairs listed in the mode panel before "+N".
+const BIGRAMS_SHOWN: usize = 5;
 
 pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
     let theme = app.theme();
@@ -130,7 +132,7 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(
         footer(
             theme,
-            "enter next · t transitions · g guided · k stats · s settings · q quit",
+            "enter next · g t b mode · k stats · s settings · q quit",
         ),
         footer_area,
     );
@@ -141,11 +143,15 @@ fn mode_lines(app: &App) -> Vec<Line<'static>> {
     let theme = app.theme();
     let muted = Style::new().fg(theme.muted);
     let targets = transitions::weak_transitions(&app.results, &app.keys.included_letters());
+    let bigrams = app.weak_bigrams();
+    let locked = app.bigram_lessons_needed();
     LessonMode::ALL
         .iter()
         .map(|&mode| {
             let current = mode == app.mode;
-            let (marker, style) = if current {
+            let (marker, style) = if mode == LessonMode::Bigrams && locked > 0 {
+                ("  ", muted)
+            } else if current {
                 (
                     "› ",
                     Style::new().fg(theme.accent).add_modifier(Modifier::BOLD),
@@ -160,6 +166,20 @@ fn mode_lines(app: &App) -> Vec<Line<'static>> {
                 }
                 LessonMode::Transitions => {
                     format!("slowest letter pairs: {}", targets.join(" · "))
+                }
+                LessonMode::Bigrams if locked > 0 => {
+                    format!("locked · unlocks after {}", lessons(locked))
+                }
+                LessonMode::Bigrams if bigrams.is_empty() => {
+                    "slow pairs 5× each · none below target now".to_string()
+                }
+                LessonMode::Bigrams => {
+                    let shown = bigrams.len().min(BIGRAMS_SHOWN);
+                    let mut about = format!("5× each slow pair: {}", bigrams[..shown].join(" · "));
+                    if bigrams.len() > shown {
+                        about.push_str(&format!(" +{}", bigrams.len() - shown));
+                    }
+                    about
                 }
             };
             Line::from(vec![

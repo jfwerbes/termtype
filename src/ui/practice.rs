@@ -65,7 +65,7 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
     let title = if app.targets.is_empty() {
         "guided"
     } else {
-        "transitions"
+        app.mode.name()
     };
     let mut block = panel(theme, title).padding(Padding::new(2, 2, 1, 1));
     if !app.targets.is_empty() {

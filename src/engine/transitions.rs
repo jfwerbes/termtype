@@ -30,6 +30,35 @@ pub fn weak_transitions(results: &[LessonResult], letters: &[char]) -> Vec<Strin
         .collect()
 }
 
+/// Counted lessons needed before bigram drills unlock, so that enough
+/// transitions have been timed to judge them.
+pub const BIGRAM_UNLOCK_LESSONS: usize = 10;
+/// Times each pair is typed in a bigram drill.
+pub const BIGRAM_REPEATS: usize = 5;
+/// Most pairs in one bigram drill, to keep lessons a sensible length.
+pub const MAX_BIGRAMS: usize = 12;
+
+/// Every letter-to-letter transition over recent lessons slower than
+/// `target_ms`, slowest first, at most `MAX_BIGRAMS`.
+pub fn weak_bigrams(results: &[LessonResult], letters: &[char], target_ms: f64) -> Vec<String> {
+    let recent = &results[results.len().saturating_sub(RECENT_LESSONS)..];
+    slowest_bigrams(recent, letters, MIN_HITS, usize::MAX)
+        .into_iter()
+        .filter(|b| !b.bigram.contains(' ') && b.time_to_type > target_ms)
+        .map(|b| b.bigram)
+        .take(MAX_BIGRAMS)
+        .collect()
+}
+
+/// Each pair typed `BIGRAM_REPEATS` times on its own: `"rl rl rl rl rl ea …"`.
+pub fn bigram_drill(targets: &[String]) -> String {
+    targets
+        .iter()
+        .flat_map(|t| std::iter::repeat_n(t.as_str(), BIGRAM_REPEATS))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// Lesson text whose words take turns containing each target transition.
 /// Real words come first, topped up with pseudo-words; a target that fits
 /// no word is drilled on its own.
@@ -125,6 +154,41 @@ mod tests {
     #[test]
     fn weak_transitions_empty_without_data() {
         assert!(weak_transitions(&[], &LETTERS).is_empty());
+    }
+
+    #[test]
+    fn weak_bigrams_are_pairs_below_target_slowest_first() {
+        let results = vec![with_bigrams(&[
+            ("ea", 20, 0, 300),
+            ("nt", 20, 0, 500),
+            ("e ", 20, 0, 900), // space: excluded
+            ("rl", 20, 0, 400),
+            ("ti", 20, 0, 200), // faster than target
+            ("la", 5, 0, 800),  // too few hits
+        ])];
+        assert_eq!(weak_bigrams(&results, &LETTERS, 250.0), ["nt", "rl", "ea"]);
+        assert!(weak_bigrams(&results, &LETTERS, 600.0).is_empty());
+    }
+
+    #[test]
+    fn weak_bigrams_are_capped() {
+        let pairs: Vec<String> = LETTERS
+            .iter()
+            .flat_map(|a| LETTERS.iter().map(move |b| format!("{a}{b}")))
+            .collect();
+        let samples: Vec<(&str, u32, u32, u32)> =
+            pairs.iter().map(|p| (p.as_str(), 20, 0, 500)).collect();
+        let results = vec![with_bigrams(&samples)];
+        assert_eq!(weak_bigrams(&results, &LETTERS, 100.0).len(), MAX_BIGRAMS);
+    }
+
+    #[test]
+    fn bigram_drill_repeats_each_pair() {
+        assert_eq!(
+            bigram_drill(&targets(&["rl", "ea"])),
+            "rl rl rl rl rl ea ea ea ea ea"
+        );
+        assert_eq!(bigram_drill(&[]), "");
     }
 
     fn targets(t: &[&str]) -> Vec<String> {

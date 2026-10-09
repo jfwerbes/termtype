@@ -5,7 +5,7 @@ use crate::config::{Config, KeyboardLayout};
 use crate::engine::keystats::KeyStatsMap;
 use crate::engine::lesson::LessonKeys;
 use crate::engine::phonetic::PhoneticModel;
-use crate::engine::result::LessonResult;
+use crate::engine::result::{LessonResult, speed_to_time};
 use crate::engine::rng::LessonRng;
 use crate::engine::session::Session;
 use crate::engine::stats::make_stats;
@@ -29,15 +29,18 @@ pub enum LessonMode {
     Guided,
     /// Words built around the slowest key transitions.
     Transitions,
+    /// Every pair below target speed, typed on its own a few times.
+    Bigrams,
 }
 
 impl LessonMode {
-    pub const ALL: [LessonMode; 2] = [Self::Guided, Self::Transitions];
+    pub const ALL: [LessonMode; 3] = [Self::Guided, Self::Transitions, Self::Bigrams];
 
     pub fn name(self) -> &'static str {
         match self {
             Self::Guided => "guided",
             Self::Transitions => "transitions",
+            Self::Bigrams => "bigrams",
         }
     }
 
@@ -46,6 +49,7 @@ impl LessonMode {
         match self {
             Self::Guided => 'g',
             Self::Transitions => 't',
+            Self::Bigrams => 'b',
         }
     }
 }
@@ -237,11 +241,22 @@ impl App {
     fn new_lesson(&mut self) {
         self.targets.clear();
         self.notice = None;
-        if self.mode == LessonMode::Transitions {
-            self.targets =
-                transitions::weak_transitions(&self.results, &self.keys.included_letters());
-            if self.targets.is_empty() {
-                self.notice = Some("not enough transition data yet · guided lesson instead".into());
+        match self.mode {
+            LessonMode::Guided => {}
+            LessonMode::Transitions => {
+                self.targets =
+                    transitions::weak_transitions(&self.results, &self.keys.included_letters());
+                if self.targets.is_empty() {
+                    self.notice =
+                        Some("not enough transition data yet · guided lesson instead".into());
+                }
+            }
+            LessonMode::Bigrams => {
+                self.targets = self.weak_bigrams();
+                if self.targets.is_empty() {
+                    self.notice =
+                        Some("no pairs below target speed · guided lesson instead".into());
+                }
             }
         }
         let text = if self.targets.is_empty() {
@@ -252,6 +267,8 @@ impl App {
                 &self.config.text_settings(),
                 &mut self.rng,
             )
+        } else if self.mode == LessonMode::Bigrams {
+            transitions::bigram_drill(&self.targets)
         } else {
             transitions::generate(
                 &self.model,
@@ -269,6 +286,17 @@ impl App {
         );
         self.last_input_at = None;
         self.screen = Screen::Practice;
+    }
+
+    /// Pairs slower than the target speed, for bigram drills.
+    pub fn weak_bigrams(&self) -> Vec<String> {
+        let target_ms = speed_to_time(self.config.lesson_settings().target_speed);
+        transitions::weak_bigrams(&self.results, &self.keys.included_letters(), target_ms)
+    }
+
+    /// Counted lessons still needed before bigram drills unlock.
+    pub fn bigram_lessons_needed(&self) -> usize {
+        transitions::BIGRAM_UNLOCK_LESSONS.saturating_sub(self.results.len())
     }
 
     fn update_keys(&mut self) {
@@ -334,6 +362,11 @@ impl App {
                     }
                     Input::Char('g') => {
                         self.mode = LessonMode::Guided;
+                        self.new_lesson();
+                    }
+                    // Locked until there is enough history; the mode panel says so.
+                    Input::Char('b') if self.bigram_lessons_needed() == 0 => {
+                        self.mode = LessonMode::Bigrams;
                         self.new_lesson();
                     }
                     Input::Char('s') => self.screen = Screen::Settings,
@@ -435,6 +468,8 @@ impl App {
         self.results.clear();
         self.key_stats = KeyStatsMap::from_results(&self.letters, &self.results);
         self.last_lesson = None;
+        // Bigram drills lock again.
+        self.mode = LessonMode::Guided;
         self.update_keys();
         self.new_lesson();
         self.screen = Screen::Settings;
@@ -628,6 +663,81 @@ pub(crate) mod tests {
         app.handle(Input::Enter, 0.0, 0);
         assert_eq!(app.mode, LessonMode::Transitions);
         assert!(!app.targets.is_empty());
+    }
+
+    /// Enough lessons to unlock bigram drills; "ar" is faster than target.
+    pub fn bigram_history() -> Vec<LessonResult> {
+        use crate::engine::result::tests::with_bigrams;
+        (0..transitions::BIGRAM_UNLOCK_LESSONS)
+            .map(|_| {
+                with_bigrams(&[
+                    ("ea", 20, 0, 500),
+                    ("rl", 20, 0, 600),
+                    ("ni", 20, 0, 400),
+                    ("ar", 20, 0, 100),
+                ])
+            })
+            .collect()
+    }
+
+    #[test]
+    fn b_is_locked_until_enough_lessons() {
+        let mut history = bigram_history();
+        history.pop();
+        let mut app = app_with(Config::default(), history);
+        assert_eq!(app.bigram_lessons_needed(), 1);
+        app.handle(Input::Esc, 0.0, 0);
+        app.handle(Input::Char('b'), 0.0, 0);
+        assert_eq!(app.mode, LessonMode::Guided);
+        assert_eq!(app.screen, Screen::Summary);
+    }
+
+    #[test]
+    fn b_drills_each_slow_pair_five_times() {
+        let mut app = app_with(Config::default(), bigram_history());
+        assert_eq!(app.bigram_lessons_needed(), 0);
+        app.handle(Input::Esc, 0.0, 0);
+        app.handle(Input::Char('b'), 0.0, 0);
+        assert_eq!(app.mode, LessonMode::Bigrams);
+        assert_eq!(app.screen, Screen::Practice);
+        assert_eq!(app.targets, ["rl", "ea", "ni"]);
+        assert_eq!(
+            lesson_text(&app),
+            "rl rl rl rl rl ea ea ea ea ea ni ni ni ni ni"
+        );
+        // The mode sticks for the next lesson.
+        app.handle(Input::Esc, 0.0, 0);
+        app.handle(Input::Enter, 0.0, 0);
+        assert_eq!(app.mode, LessonMode::Bigrams);
+    }
+
+    #[test]
+    fn bigram_drill_without_slow_pairs_falls_back_to_guided_text() {
+        let mut config = Config::default();
+        config.lesson.target_wpm = 10.0; // 1200 ms: nothing is slower
+        let mut app = app_with(config, bigram_history());
+        app.handle(Input::Esc, 0.0, 0);
+        app.handle(Input::Char('b'), 0.0, 0);
+        assert_eq!(app.mode, LessonMode::Bigrams);
+        assert!(app.targets.is_empty());
+        assert!(
+            app.notice
+                .as_ref()
+                .unwrap()
+                .contains("no pairs below target")
+        );
+        assert!(lesson_text(&app).contains('e'));
+    }
+
+    #[test]
+    fn clearing_progress_relocks_bigrams() {
+        let mut app = app_with(Config::default(), bigram_history());
+        app.handle(Input::Esc, 0.0, 0);
+        app.handle(Input::Char('b'), 0.0, 0);
+        open_clear_progress(&mut app);
+        app.handle(Input::Enter, 0.0, 0);
+        app.handle(Input::Char('y'), 0.0, 0);
+        assert_eq!(app.mode, LessonMode::Guided);
     }
 
     #[test]

@@ -513,14 +513,32 @@ mod tests {
     }
 
     #[test]
-    fn summary_footer_offers_both_modes() {
+    fn summary_offers_every_mode() {
         let mut app = app();
         app.handle(Input::Esc, 0.0, 0);
         let text = screen_text(&render(&app, 90, 30));
+        for m in ["g guided", "t transitions", "b bigrams", "g t b mode"] {
+            assert!(text.contains(m), "{m}:\n{text}");
+        }
         assert!(
-            text.contains("t transitions") && text.contains("g guided"),
+            text.contains(&format!(
+                "locked · unlocks after {} lessons",
+                crate::engine::transitions::BIGRAM_UNLOCK_LESSONS
+            )),
             "{text}"
         );
+    }
+
+    #[test]
+    fn summary_lists_bigram_drill_pairs() {
+        let mut app = app_with(Config::default(), crate::app::tests::bigram_history());
+        app.handle(Input::Esc, 0.0, 0);
+        let text = screen_text(&render(&app, 90, 30));
+        assert!(text.contains("5× each slow pair: rl · ea · ni"), "{text}");
+        app.handle(Input::Char('b'), 0.0, 0);
+        let text = screen_text(&render(&app, 90, 30));
+        assert!(text.contains("╭─ bigrams"), "{text}");
+        assert!(text.contains("drilling rl · ea · ni"), "{text}");
     }
 
     #[test]

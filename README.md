@@ -6,6 +6,8 @@ engine of [keybr.com](https://www.keybr.com) to Rust and runs it as a TUI.
 > termtype was vibe coded with [Claude](https://claude.com/claude-code): most
 > of the code was written by Claude under my direction.
 
+![A guided lesson: the text with the cursor, the unlocked keys and the on-screen split keyboard](docs/screenshots/guided.png)
+
 - **Guided lessons.** You start with six letters. The next letter unlocks once
   every unlocked key reaches your target speed. Each lesson focuses on your
   weakest key.
@@ -19,8 +21,13 @@ engine of [keybr.com](https://www.keybr.com) to Rust and runs it as a TUI.
   3 slowest letter-to-letter transitions over the last 50 lessons. Words take
   turns drilling each pair. A pair needs 10 typings before it counts. Targets
   are recomputed every lesson, so a pair drops off once it gets faster. Press
-  `g` to return to guided lessons. The menu's mode panel shows which mode is
-  on (it sticks across lessons) and your current slowest pairs.
+  `g` to return to guided lessons.
+- **Bigram drills.** Press `b` in the menu to type every letter pair that is
+  still below your target speed on its own, 5 times each, slowest first
+  (`rl rl rl rl rl ea ea …`, up to 12 pairs). Unlocks after 10 lessons, so
+  there is enough history to judge your transitions.
+- **Mode panel.** The menu lists the three modes, marks the current one (it
+  sticks across lessons) and previews the pairs each drill would target.
 - **Clear progress.** The last setting deletes your lesson history after a
   confirmation. The old history is moved to `results.jsonl.bak` until the
   next clear.
@@ -29,6 +36,27 @@ engine of [keybr.com](https://www.keybr.com) to Rust and runs it as a TUI.
   or `off`. It hides itself when the terminal is too small.
 - **Themes.** TOML files with hex colours. Built-ins: `terminal` (uses your
   terminal's palette), `gruvbox`, `catppuccin-mocha`, `nord`.
+
+## Screenshots
+
+The menu after a lesson, with the mode panel:
+
+![The menu: last lesson, the three modes with their target pairs, a progress sparkline and the keys](docs/screenshots/menu.png)
+
+A bigram drill, typing each slow pair 5 times:
+
+![A bigram drill: rl, ea, ar, in and al typed five times each](docs/screenshots/bigrams.png)
+
+Key stats (`k`), with per-key progress and the slowest transitions:
+
+![Key stats: a table of every key, a keyboard heatmap and the slowest transitions](docs/screenshots/key-stats.png)
+
+Clearing progress asks first:
+
+![The clear progress dialog over the settings list](docs/screenshots/clear-progress.png)
+
+The screenshots are rendered from the real UI with simulated typing:
+`cargo run --example screenshots` regenerates them (needs `rsvg-convert`).
 
 ## Usage
 
@@ -40,7 +68,7 @@ termtype
 | Where    | Keys                                                                          |
 |----------|-------------------------------------------------------------------------------|
 | Typing   | `esc` menu · `tab` new lesson · `ctrl-w` / `ctrl-backspace` delete word · `ctrl-c` quit |
-| Menu     | `enter` next lesson · `t` transition drills · `g` guided lessons · `k` key stats · `s` settings · `q` quit |
+| Menu     | `enter` next lesson · `g` guided · `t` transition drills · `b` bigram drills · `k` key stats · `s` settings · `q` quit |
 | Settings | `↑↓` select · `←→` / `enter` change · `esc` back · on *Clear progress*: `y` confirm, `n` / `esc` cancel |
 
 ## Files
@@ -119,7 +147,7 @@ differs from keybr in these ways:
   lessons.
 - **Bigram timings.** termtype also records transition (bigram) timings with
   each result. keybr's algorithm doesn't use them; termtype shows them as
-  "slowest transitions".
+  "slowest transitions" and builds transition and bigram drills from them.
 - **Retype drill.** This is termtype's own feature.
 
 Not yet ported: capitals and punctuation in lessons, learning-rate
