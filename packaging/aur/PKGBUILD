@@ -1,0 +1,40 @@
+# Maintainer: jovan <jfwerbes at gmail dot com>
+
+pkgname=termtype
+pkgver=0.0.1
+pkgrel=1
+pkgdesc="Adaptive touch-typing tutor for the terminal, built on keybr.com's learning engine"
+arch=('x86_64' 'aarch64')
+url="https://github.com/jfwerbes/termtype"
+license=('AGPL-3.0-only')
+depends=('libgcc' 'glibc')
+makedepends=('cargo')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('56bf0f114fe66c009daed8f3d86dc2d7d9fe8fe879663a3c12572d7cc2870347')
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo build --frozen --release
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  cargo test --frozen
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  install -Dm755 "target/release/$pkgname" -t "$pkgdir/usr/bin/"
+  install -Dm644 NOTICE -t "$pkgdir/usr/share/licenses/$pkgname/"
+  install -Dm644 README.md -t "$pkgdir/usr/share/doc/$pkgname/"
+}

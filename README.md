@@ -61,8 +61,15 @@ The screenshots are rendered from the real UI with simulated typing:
 ## Usage
 
 ```sh
-cargo install --path .
+cargo install --git https://github.com/jfwerbes/termtype --tag v0.0.1
 termtype
+```
+
+On Arch Linux, build the package from [`packaging/aur/`](packaging/aur):
+
+```sh
+git clone https://github.com/jfwerbes/termtype && cd termtype/packaging/aur
+makepkg -si
 ```
 
 | Where    | Keys                                                                          |

@@ -1,0 +1,15 @@
+pkgbase = termtype
+	pkgdesc = Adaptive touch-typing tutor for the terminal, built on keybr.com's learning engine
+	pkgver = 0.0.1
+	pkgrel = 1
+	url = https://github.com/jfwerbes/termtype
+	arch = x86_64
+	arch = aarch64
+	license = AGPL-3.0-only
+	makedepends = cargo
+	depends = libgcc
+	depends = glibc
+	source = termtype-0.0.1.tar.gz::https://github.com/jfwerbes/termtype/archive/refs/tags/v0.0.1.tar.gz
+	sha256sums = 56bf0f114fe66c009daed8f3d86dc2d7d9fe8fe879663a3c12572d7cc2870347
+
+pkgname = termtype
