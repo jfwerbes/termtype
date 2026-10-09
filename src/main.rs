@@ -105,6 +105,7 @@ unlocked key reaches the target speed (keybr.com's method).
 Keys while typing:  esc menu · tab new lesson · ctrl-w / ctrl-backspace delete word
 Keys in the menu:   enter practice · g guided · t transition drills
                     b bigram drills · k key stats · s settings · q quit
+Keys in settings:   ↑↓ or j k select · ←→ h l or enter change · g G first/last
 
 Files:
   config   {}

@@ -428,6 +428,22 @@ impl App {
             }
             return vec![];
         }
+        // Vim keys: j/k move, h/l change, g/G jump to the first/last setting.
+        let input = match input {
+            Input::Char('k') => Input::Up,
+            Input::Char('j') => Input::Down,
+            Input::Char('h') => Input::Left,
+            Input::Char('l') => Input::Right,
+            Input::Char('g') => {
+                self.settings_cursor = 0;
+                return vec![];
+            }
+            Input::Char('G') => {
+                self.settings_cursor = Field::ALL.len() - 1;
+                return vec![];
+            }
+            other => other,
+        };
         let field = Field::ALL[self.settings_cursor];
         if field == Field::ClearProgress {
             match input {
@@ -970,6 +986,35 @@ pub(crate) mod tests {
         // Nothing left to clear: no dialog.
         app.handle(Input::Enter, 0.0, 0);
         assert!(!app.confirm_clear);
+    }
+
+    #[test]
+    fn settings_vim_keys() {
+        let mut app = app();
+        app.handle(Input::Esc, 0.0, 0);
+        app.handle(Input::Char('s'), 0.0, 0);
+        app.handle(Input::Char('j'), 0.0, 0);
+        assert_eq!(Field::ALL[app.settings_cursor], Field::AlphabetSize);
+        app.handle(Input::Char('k'), 0.0, 0);
+        assert_eq!(Field::ALL[app.settings_cursor], Field::TargetWpm);
+        let effects = app.handle(Input::Char('l'), 0.0, 0);
+        assert_eq!(app.config.lesson.target_wpm, 40.0);
+        assert_eq!(effects, [Effect::SaveConfig(app.config.clone())]);
+        app.handle(Input::Char('h'), 0.0, 0);
+        assert_eq!(app.config.lesson.target_wpm, 35.0);
+        app.handle(Input::Char('G'), 0.0, 0);
+        assert_eq!(Field::ALL[app.settings_cursor], Field::ClearProgress);
+        app.handle(Input::Char('g'), 0.0, 0);
+        assert_eq!(app.settings_cursor, 0);
+        // While asking to clear, vim keys don't move the cursor.
+        let mut app = app_with(Config::default(), transition_history());
+        open_clear_progress(&mut app);
+        app.handle(Input::Char('l'), 0.0, 0);
+        assert!(app.confirm_clear);
+        app.handle(Input::Char('k'), 0.0, 0);
+        assert!(app.confirm_clear);
+        assert_eq!(Field::ALL[app.settings_cursor], Field::ClearProgress);
+        assert_eq!(app.results.len(), 1);
     }
 
     #[test]

@@ -69,7 +69,7 @@ termtype
 |----------|-------------------------------------------------------------------------------|
 | Typing   | `esc` menu · `tab` new lesson · `ctrl-w` / `ctrl-backspace` delete word · `ctrl-c` quit |
 | Menu     | `enter` next lesson · `g` guided · `t` transition drills · `b` bigram drills · `k` key stats · `s` settings · `q` quit |
-| Settings | `↑↓` select · `←→` / `enter` change · `esc` back · on *Clear progress*: `y` confirm, `n` / `esc` cancel |
+| Settings | `↑↓` / `j` `k` select · `←→` / `h` `l` / `enter` change · `g` / `G` first / last · `esc` back · on *Clear progress*: `y` confirm, `n` / `esc` cancel |
 
 ## Files
 

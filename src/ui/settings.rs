@@ -80,7 +80,10 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
         frame.render_widget(footer(theme, "y clear · n or esc cancel"), footer_area);
     } else {
         frame.render_widget(
-            footer(theme, "↑↓ select · ←→ or enter change · esc back"),
+            footer(
+                theme,
+                "↑↓ jk select · ←→ hl enter change · g G first/last · esc back",
+            ),
             footer_area,
         );
     }
